@@ -81,6 +81,14 @@ export default function App() {
   // Päivitä RAF-kohde aina kun scale tai position muuttuu
   useEffect(() => { rafTarget.current = { x: position.x, y: position.y, s: scale }; }, [position, scale]);
 
+  // Pakota transform jokaisen React-renderöinnin jälkeen (estää palautumisen)
+  useEffect(() => {
+    const el = wallRef.current;
+    if (!el) return;
+    const t = rafTarget.current;
+    el.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.s})`;
+  });
+
   // Kosketustuki — päivittää suoraan ref:iä, ei React-tilaa (smooth mobiili)
   const touchRef = useRef({ startX: 0, startY: 0, lastDist: 0, startScale: 1, startPos: { x: 0, y: 0 }, time: 0, moved: false });
 
