@@ -26,10 +26,31 @@ export default function App() {
   const editingRef = useRef(editingNoteId);
   editingRef.current = editingNoteId;
 
-  // Lataa viestit tietokannasta kun sovellus käynnistyy
+  // Ref latauksen seurantaan (vain kerran)
+  const hasCentered = useRef(false);
+
+  // Lataa viestit tietokannasta ja kohdista uusimpaan
   useEffect(() => {
     loadNotes();
   }, [loadNotes]);
+
+  // Kun viestit latautuvat, kohdista canvas uusimpaan korttiin
+  useEffect(() => {
+    if (notes.length === 0 || hasCentered.current) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const newest = notes[notes.length - 1];
+    const noteCenterX = newest.x + newest.width / 2;
+    const noteCenterY = newest.y + newest.height / 2;
+
+    setScale(1.5);
+    setPosition({
+      x: rect.width / 2 - noteCenterX * 1.5,
+      y: rect.height / 2 - noteCenterY * 1.5,
+    });
+    hasCentered.current = true;
+  }, [notes]);
 
   // Zoom/pan -tila
   const [scale, setScale] = useState(1);
@@ -199,7 +220,7 @@ export default function App() {
         scale={scale}
       />
 
-      <DevPanel />
+      {import.meta.env.DEV && <DevPanel />}
       <InfoButton />
 
       {/* Ohjeistus uudelle käyttäjälle */}
