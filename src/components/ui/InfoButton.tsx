@@ -7,6 +7,7 @@ export function InfoButton() {
     <>
       <button
         onClick={() => setIsOpen(true)}
+        className="info-btn"
         style={{
           position: 'fixed',
           top: 16,
