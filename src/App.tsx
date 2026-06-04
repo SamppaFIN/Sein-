@@ -63,14 +63,16 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const wallRef = useRef<HTMLDivElement>(null);
 
-  // RAF-pohjainen transform-päivitys (60 FPS, ei React-renderöintiä kesken liikkeen)
+  // RAF-pohjainen transform-päivitys (60 FPS) — päivittää seinän + parallax-taustan
   const rafTarget = useRef({ x: 0, y: 0, s: 1 });
   const rafId = useRef(0);
   const rafLoop = useCallback(() => {
-    const el = wallRef.current;
-    if (!el) return;
+    const wall = wallRef.current;
+    const bg = document.querySelector('.cosmic-bg-canvas') as HTMLCanvasElement | null;
     const t = rafTarget.current;
-    el.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.s})`;
+    if (wall) wall.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.s})`;
+    // Parallax: tausta liikkuu 3× hitaammin, skaalautuu vähemmän
+    if (bg) bg.style.transform = `translate(${t.x * 0.35}px, ${t.y * 0.35}px) scale(${0.8 + t.s * 0.2})`;
     rafId.current = requestAnimationFrame(rafLoop);
   }, []);
 
@@ -227,8 +229,40 @@ export default function App() {
 
   const handleMouseUp = useCallback(() => {
     setIsPanning(false);
-    // Synkronoi ref → React-tila
     setPosition({ x: rafTarget.current.x, y: rafTarget.current.y });
+    // Auto-snap lähimpään korttiin
+    snapToNearest();
+  }, []);
+
+  // Etsi lähin kortti viewportin keskeltä ja keskitä siihen
+  const snapToNearest = useCallback(() => {
+    const notes = useWallStore.getState().notes;
+    if (notes.length === 0) return;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const vpCX = rect.width / 2;
+    const vpCY = rect.height / 2;
+    const s = rafTarget.current.s;
+    const px = rafTarget.current.x;
+    const py = rafTarget.current.y;
+
+    // Etsi lähin — muunna lapun keskipiste screen-koordinaatistoon
+    let bestNote = notes[0];
+    let bestDist = Infinity;
+    for (const note of notes) {
+      const screenX = (note.x + note.width / 2) * s + px;
+      const screenY = (note.y + note.height / 2) * s + py;
+      const dist = Math.hypot(screenX - vpCX, screenY - vpCY);
+      if (dist < bestDist) { bestDist = dist; bestNote = note; }
+    }
+
+    // Snapataan vain jos ollaan tarpeeksi lähellä (alle puoli viewporttia)
+    if (bestDist < rect.width * 0.7) {
+      const cx = bestNote.x + bestNote.width / 2;
+      const cy = bestNote.y + bestNote.height / 2;
+      rafTarget.current = { x: vpCX - cx * s, y: vpCY - cy * s, s };
+      setPosition({ x: vpCX - cx * s, y: vpCY - cy * s });
+    }
   }, []);
 
   // Klikkaus tyhjään → sulje editointi TAI luo uusi lappu
@@ -413,7 +447,6 @@ export default function App() {
             <StickyNote
               key={note.id}
               note={note}
-              zoom={rafTarget.current.s}
               onUpdate={(data) => updateNote(note.id, data)}
               onDoubleClick={handleNoteDoubleClick}
             />

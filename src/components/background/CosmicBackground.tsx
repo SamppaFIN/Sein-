@@ -273,6 +273,7 @@ export function CosmicBackground() {
   return (
     <canvas
       ref={canvasRef}
+      className="cosmic-bg-canvas"
       style={{
         position: 'fixed',
         top: 0,
