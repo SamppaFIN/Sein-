@@ -1,18 +1,17 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useWallStore } from '@/store/useWallStore';
+import { useWallStore, useFilteredNotes } from '@/store/useWallStore';
 import { getFadeOpacity } from '@/lib/notes';
 import type { Note } from '@/types';
 
 interface NotesCanvasProps {
   scale: number;
-  positionX: number;
-  positionY: number;
   onNoteClick: (note: Note) => void;
   onNoteDblClick: (note: Note) => void;
   onCanvasClick: (canvasX: number, canvasY: number) => void;
   onPanStart: (e: { clientX: number; clientY: number }) => void;
   onPanMove: (e: { clientX: number; clientY: number }) => void;
   onPanEnd: () => void;
+  onPinchZoom: (data: { scale: number; centerX: number; centerY: number }) => void;
 }
 
 const CANVAS_W = 5000;
@@ -53,12 +52,13 @@ function wrapText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number)
 }
 
 export function NotesCanvas({
-  scale, positionX, positionY,
+  scale,
   onNoteClick, onNoteDblClick, onCanvasClick,
   onPanStart, onPanMove, onPanEnd,
+  onPinchZoom,
 }: NotesCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const notes = useWallStore((s) => s.notes);
+  const notes = useFilteredNotes();
   const editingNoteId = useWallStore((s) => s.editingNoteId);
   const focusedNoteId = useWallStore((s) => s.focusedNoteId);
 
@@ -176,24 +176,17 @@ export function NotesCanvas({
 
   const lastClick = useRef(0);
   const isDragging = useRef(false);
+  const pinchRef = useRef({ startDist: 0, startScale: 1 });
 
-  const handleMouseDown = (e: React.MouseEvent) => {
-    onPanStart({ clientX: e.clientX, clientY: e.clientY });
-  };
-
-  const handleMouseMove = (e: React.MouseEvent) => {
-    isDragging.current = true;
-    onPanMove({ clientX: e.clientX, clientY: e.clientY });
-  };
-
-  const handleMouseUp = (e: React.MouseEvent) => {
+  const endInteraction = useCallback((clientX: number, clientY: number) => {
     onPanEnd();
     if (isDragging.current) { isDragging.current = false; return; }
 
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const canvasX = (e.clientX - rect.left - positionX) / scale;
-    const canvasY = (e.clientY - rect.top - positionY) / scale;
+    // rect sisältää jo wallin translate():n → pelkkä jako scale:lla riittää
+    const canvasX = (clientX - rect.left) / scale;
+    const canvasY = (clientY - rect.top) / scale;
 
     const hit = hitTest(canvasX, canvasY);
     const now = Date.now();
@@ -209,6 +202,69 @@ export function NotesCanvas({
       onCanvasClick(canvasX, canvasY);
       lastClick.current = 0;
     }
+  }, [scale, hitTest, onPanEnd, onNoteClick, onNoteDblClick, onCanvasClick]);
+
+  // 🖱️ Mouse
+  const handleMouseDown = (e: React.MouseEvent) => {
+    onPanStart({ clientX: e.clientX, clientY: e.clientY });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    isDragging.current = true;
+    onPanMove({ clientX: e.clientX, clientY: e.clientY });
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    endInteraction(e.clientX, e.clientY);
+  };
+
+  // 👆 Touch
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      const t = e.touches[0];
+      onPanStart({ clientX: t.clientX, clientY: t.clientY });
+    } else if (e.touches.length === 2) {
+      e.preventDefault();
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      pinchRef.current = {
+        startDist: Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY),
+        startScale: scale,
+      };
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      e.preventDefault();
+      isDragging.current = true;
+      const t = e.touches[0];
+      onPanMove({ clientX: t.clientX, clientY: t.clientY });
+    } else if (e.touches.length === 2) {
+      e.preventDefault();
+      isDragging.current = true;
+      const t0 = e.touches[0];
+      const t1 = e.touches[1];
+      const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+      const midX = (t0.clientX + t1.clientX) / 2;
+      const midY = (t0.clientY + t1.clientY) / 2;
+      const { startDist, startScale } = pinchRef.current;
+      if (startDist > 0) {
+        const newScale = Math.min(3.5, Math.max(0.15, startScale * (dist / startDist)));
+        onPinchZoom({ scale: newScale, centerX: midX, centerY: midY });
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (e.touches.length > 0) return; // don't end interaction if fingers are still down
+    // Snap zoom to nearest fixed level after pinch
+    if (isDragging.current && pinchRef.current.startDist > 0) {
+      onPinchZoom({ scale: scale, centerX: 0, centerY: 0 }); // signals: snap to nearest
+    }
+    const t = e.changedTouches[0];
+    endInteraction(t.clientX, t.clientY);
   };
 
   return (
@@ -216,10 +272,13 @@ export function NotesCanvas({
       ref={canvasRef}
       width={CANVAS_W}
       height={CANVAS_H}
-      style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'auto' }}
+      style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'auto', touchAction: 'none' }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     />
   );
 }

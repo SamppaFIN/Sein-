@@ -59,8 +59,7 @@ export default function App() {
   // Zoom/pan -tila
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const panRef = useRef({ panning: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const wallRef = useRef<HTMLDivElement>(null);
 
@@ -95,71 +94,6 @@ export default function App() {
     wall.style.transform = `translate(${position.x}px, ${position.y}px) scale(${scale})`;
   }, [scale, position]);
 
-  // Kosketustuki — päivittää suoraan ref:iä, ei React-tilaa (smooth mobiili)
-  const touchRef = useRef({ startX: 0, startY: 0, lastDist: 0, startScale: 1, startPos: { x: 0, y: 0 }, time: 0, moved: false });
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if ((e.target as HTMLElement).closest('.sticky-note, .toolbar, .tag-bar, .time-filter, .zoom-controls, .info-btn, .tag-list-view')) return;
-    const touch = e.touches;
-    const t = touchRef.current;
-    t.startX = touch[0].clientX;
-    t.startY = touch[0].clientY;
-    t.startPos = { x: position.x, y: position.y };
-    t.time = Date.now();
-    t.moved = false;
-    if (touch.length === 2) {
-      t.lastDist = Math.hypot(touch[0].clientX - touch[1].clientX, touch[0].clientY - touch[1].clientY);
-      t.startScale = scale;
-    }
-  }, [position, scale]);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    const t = touchRef.current;
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      const dx = Math.abs(touch.clientX - t.startX);
-      const dy = Math.abs(touch.clientY - t.startY);
-      if (dx > 5 || dy > 5) t.moved = true;
-      // Päivitä suoraan RAF-kohdetta (ei React-tilaa → smooth)
-      rafPos.current = {
-        x: t.startPos.x + (touch.clientX - t.startX) - position.x,
-        y: t.startPos.y + (touch.clientY - t.startY) - position.y,
-      };
-    } else if (e.touches.length === 2) {
-      t.moved = true;
-      const touch0 = e.touches[0];
-      const touch1 = e.touches[1];
-      const dist = Math.hypot(touch0.clientX - touch1.clientX, touch0.clientY - touch1.clientY);
-      if (t.lastDist > 0) {
-        const newScale = Math.min(Math.max(0.01, t.startScale * (dist / t.lastDist)), 4);
-        zoomGoal.current = { ...zoomGoal.current, s: newScale };
-      }
-    }
-  }, [scale]);
-
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    // Synkronoi ref → React-tila kun liike loppuu
-    setPosition({ x: position.x + rafPos.current.x, y: position.y + rafPos.current.y });
-    rafPos.current = { x: 0, y: 0 };
-    const t = touchRef.current;
-    if (!t.moved && e.changedTouches.length === 1) {
-      const touch = e.changedTouches[0];
-      if ((touch.target as HTMLElement).closest('.sticky-note, .toolbar, .tag-bar, .time-filter, .zoom-controls, .info-btn, .tag-list-view')) return;
-      const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect || isPanning) return;
-      const currentlyEditing = editingRef.current;
-      if (currentlyEditing) { setEditingNoteId(null); return; }
-      const canvasX = (touch.clientX - rect.left - position.x - rafPos.current.x) / scale;
-      const canvasY = (touch.clientY - rect.top - position.y - rafPos.current.y) / scale;
-      addNote(canvasX, canvasY);
-      setFocusedNoteId(null);
-      setTimeout(() => {
-        const r = containerRef.current?.getBoundingClientRect();
-        if (r) { setScale(1.8); setPosition({ x: r.width / 2 - canvasX * 1.8, y: r.height / 2 - canvasY * 1.8 }); }
-      }, 50);
-    }
-  }, [isPanning, addNote, setEditingNoteId, setFocusedNoteId]);
-
   // Zoom — 5 kiinteää tasoa, rulla siirtyy tasojen välillä
   useEffect(() => {
     const el = containerRef.current;
@@ -188,106 +122,7 @@ export default function App() {
     return () => el.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // Pan käsittely (raahaus tyhjästä kohdasta)
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('.sticky-note')) return;
-    if ((e.target as HTMLElement).closest('.toolbar, .tag-panel, .zoom-controls, .tag-bar, .time-filter, .info-btn')) return;
-    setIsPanning(true);
-    setPanStart({ x: e.clientX - position.x, y: e.clientY - position.y });
-  }, [position]);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!isPanning) return;
-    // Päivitä suoraan RAF-kohdetta smooth pan
-    rafPos.current = {
-      x: e.clientX - panStart.x - position.x,
-      y: e.clientY - panStart.y - position.y,
-    };
-  }, [isPanning, panStart, scale]);
-
-  const handleMouseUp = useCallback(() => {
-    setIsPanning(false);
-    setPosition({ x: position.x + rafPos.current.x, y: position.y + rafPos.current.y });
-    rafPos.current = { x: 0, y: 0 };
-    snapToNearest();
-  }, []);
-
-  // Etsi lähin kortti viewportin keskeltä ja keskitä siihen
-  const snapToNearest = useCallback(() => {
-    const notes = useWallStore.getState().notes;
-    if (notes.length === 0) return;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const vpCX = rect.width / 2;
-    const vpCY = rect.height / 2;
-    // Etsi lähin — muunna lapun keskipiste screen-koordinaatistoon
-    let bestNote = notes[0];
-    let bestDist = Infinity;
-    const sx = position.x + rafPos.current.x;
-    const sy = position.y + rafPos.current.y;
-    for (const note of notes) {
-      const screenX = (note.x + note.width / 2) * scale + sx;
-      const screenY = (note.y + note.height / 2) * scale + sy;
-      const dist = Math.hypot(screenX - vpCX, screenY - vpCY);
-      if (dist < bestDist) { bestDist = dist; bestNote = note; }
-    }
-    if (bestDist < 60) {
-      const cx = bestNote.x + bestNote.width / 2;
-      const cy = bestNote.y + bestNote.height / 2;
-      setPosition({ x: vpCX - cx * scale, y: vpCY - cy * scale });
-    }
-  }, []);
-
-  // Klikkaus tyhjään → sulje editointi TAI luo uusi lappu
-  const handleCanvasClick = useCallback((e: React.MouseEvent) => {
-    if (isPanning) return;
-    if ((e.target as HTMLElement).closest('.sticky-note')) return;
-
-    const currentlyEditing = editingRef.current;
-    if (currentlyEditing) {
-      // Tarkista DOM:sta onko textarea:ssa oikeaa sisältöä (store on vanhentunut)
-      const textarea = document.querySelector('.sticky-note.editing textarea') as HTMLTextAreaElement | null;
-      const value = textarea?.value ?? '';
-      const isEmpty = value.trim() === '' || value === 'Kirjoita uusi viesti seinälle';
-
-      if (!isEmpty) {
-        setFocusedNoteId(null);
-      }
-
-      if (isEmpty) {
-        // Tyhjä tarra — siirrä klikkauskohtaan
-        const rect = containerRef.current?.getBoundingClientRect();
-        if (rect) {
-          const canvasX = (e.clientX - rect.left - position.x) / scale;
-          const canvasY = (e.clientY - rect.top - position.y) / scale;
-          useWallStore.getState().updateNote(currentlyEditing, { x: canvasX, y: canvasY });
-        }
-        return;
-      }
-
-      // Tarraan on kirjoitettu — tallenna ja sulje
-      setEditingNoteId(null);
-      return;
-    }
-
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const canvasX = (e.clientX - rect.left - position.x) / scale;
-    const canvasY = (e.clientY - rect.top - position.y) / scale;
-
-    addNote(canvasX, canvasY);
-    setFocusedNoteId(null);
-
-    // Zoomaa uuteen lappuun — käytä instant RAF + React sync
-    if (rect) {
-      const x = rect.width / 2 - canvasX * 1.8;
-      const y = rect.height / 2 - canvasY * 1.8;
-      setScale(1.8);
-      setScale(1.8);
-      setPosition({ x, y });
-    }
-  }, [addNote, isPanning, setEditingNoteId, setFocusedNoteId]);
+  // Pan käsittely — NotesCanvas hoitaa
 
   // Tuplaklikkaus lappuun → keskitä ja zoomaa
   const handleNoteDoubleClick = useCallback((note: Note) => {
@@ -296,20 +131,24 @@ export default function App() {
 
     const noteCenterX = note.x + note.width / 2;
     const noteCenterY = note.y + note.height / 2;
-    const targetScale = 2;
+    const targetScale = 1.8;
+
+    // Synkronoi zoomIdx kiinteisiin tasoihin
+    zoomIdx.current = ZOOM_LEVELS.indexOf(targetScale);
+    if (zoomIdx.current < 0) zoomIdx.current = 3;
 
     setScale(targetScale);
     setPosition({
       x: rect.width / 2 - noteCenterX * targetScale,
       y: rect.height / 2 - noteCenterY * targetScale,
     });
-    // Päivitä tavoite (RAF liukuu smoothisti)
-    setScale(targetScale);
-    setPosition({
+    zoomGoal.current = {
       x: rect.width / 2 - noteCenterX * targetScale,
       y: rect.height / 2 - noteCenterY * targetScale,
-    });
-  }, []);
+      s: targetScale,
+    };
+    setFocusedNoteId(note.id);
+  }, [setFocusedNoteId]);
 
   // Satunnainen lappu
   const handleRandomNote = useCallback(() => {
@@ -321,8 +160,9 @@ export default function App() {
     if (!rect) return;
     const cx = note.x + note.width / 2;
     const cy = note.y + note.height / 2;
-    const s = 2;
+    const s = 1.8;
     zoomGoal.current = { x: rect.width / 2 - cx * s, y: rect.height / 2 - cy * s, s };
+    zoomIdx.current = ZOOM_LEVELS.indexOf(s);
     setScale(s);
     setPosition({ x: rect.width / 2 - cx * s, y: rect.height / 2 - cy * s });
   }, []);
@@ -388,6 +228,35 @@ export default function App() {
     setPosition({ x: 0, y: 0 });
   };
 
+  // Pinch-zoom — keskittyy sormien väliin, clamp kiinteisiin rajoihin
+  const handlePinchZoom = useCallback(({ scale: newScale, centerX, centerY }: { scale: number; centerX: number; centerY: number }) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const oldScale = scale;
+    const clamped = Math.min(3.5, Math.max(0.15, newScale));
+
+    // Zoom keskittyy pinch-keskipisteeseen: uusi positio = piste pysyy paikallaan
+    const worldX = (centerX - rect.left - position.x) / oldScale;
+    const worldY = (centerY - rect.top - position.y) / oldScale;
+
+    setScale(clamped);
+    setPosition({
+      x: centerX - rect.left - worldX * clamped,
+      y: centerY - rect.top - worldY * clamped,
+    });
+
+    // Synkronoi zoomIdx lähimpään kiinteään tasoon
+    const ZOOM_LEVELS = [0.15, 0.35, 0.6, 1, 1.8, 3.5];
+    let bestDiff = Infinity;
+    let bestIdx = zoomIdx.current;
+    for (let i = 0; i < ZOOM_LEVELS.length; i++) {
+      const diff = Math.abs(ZOOM_LEVELS[i] - clamped);
+      if (diff < bestDiff) { bestDiff = diff; bestIdx = i; }
+    }
+    zoomIdx.current = bestIdx;
+  }, [scale, position]);
+
   return (
     <div
       className="no-select"
@@ -404,27 +273,21 @@ export default function App() {
 
       <div
         ref={containerRef}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
         style={{
           width: '100%',
           height: '100%',
-          cursor: isPanning ? 'grabbing' : 'grab',
+          cursor: 'grab',
           overflow: 'hidden',
           position: 'relative',
           background: 'transparent',
+          touchAction: 'none',
         }}
       >
         {/* Ääretön canvas-kerros */}
         <div
           className="wall-canvas"
           ref={wallRef}
-          onClick={handleCanvasClick}
+
           style={{
             width: WALL_SIZE,
             height: WALL_SIZE,
@@ -432,8 +295,6 @@ export default function App() {
         >
           <NotesCanvas
             scale={scale}
-            positionX={position.x}
-            positionY={position.y}
             onNoteClick={(note) => setEditingNoteId(note.id)}
             onNoteDblClick={(note) => { setFocusedNoteId(note.id); handleNoteDoubleClick(note); }}
             onCanvasClick={(cx, cy) => {
@@ -443,18 +304,28 @@ export default function App() {
               if (r) { setScale(1.8); setPosition({ x: r.width / 2 - cx * 1.8, y: r.height / 2 - cy * 1.8 }); }
             }}
             onPanStart={({ clientX, clientY }) => {
-              setIsPanning(true);
-              setPanStart({ x: clientX - position.x, y: clientY - position.y });
+              panRef.current = {
+                panning: true,
+                startX: clientX,
+                startY: clientY,
+                startPosX: position.x,
+                startPosY: position.y,
+              };
             }}
             onPanMove={({ clientX, clientY }) => {
-              if (!isPanning) return;
-              rafPos.current = { x: clientX - panStart.x - position.x, y: clientY - panStart.y - position.y };
+              if (!panRef.current.panning) return;
+              const dx = clientX - panRef.current.startX;
+              const dy = clientY - panRef.current.startY;
+              rafPos.current = { x: dx, y: dy };
             }}
             onPanEnd={() => {
-              setIsPanning(false);
-              setPosition({ x: position.x + rafPos.current.x, y: position.y + rafPos.current.y });
+              panRef.current.panning = false;
+              const totalX = position.x + rafPos.current.x;
+              const totalY = position.y + rafPos.current.y;
+              setPosition({ x: totalX, y: totalY });
               rafPos.current = { x: 0, y: 0 };
             }}
+            onPinchZoom={handlePinchZoom}
           />
         </div>
       </div>
