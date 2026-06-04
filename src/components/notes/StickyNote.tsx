@@ -8,11 +8,12 @@ import { useWallStore } from '@/store/useWallStore';
 
 interface StickyNoteProps {
   note: Note;
+  zoom: number;
   onUpdate: (data: Partial<Note>) => void;
   onDoubleClick: (note: Note) => void;
 }
 
-export const StickyNote = React.memo(function StickyNote({ note, onUpdate, onDoubleClick }: StickyNoteProps) {
+export const StickyNote = React.memo(function StickyNote({ note, zoom, onUpdate, onDoubleClick }: StickyNoteProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [localContent, setLocalContent] = useState(note.content);
@@ -40,6 +41,9 @@ export const StickyNote = React.memo(function StickyNote({ note, onUpdate, onDou
   // Haalistuminen — pois päältä jos editoidaan tai fokusoitu
   const isActive = isEditing || focusedNoteId === note.id;
   const fadeOpacity = isActive ? 1 : getFadeOpacity(note.created_at);
+
+  // Level-of-Detail (LOD) — eri zoom-tasoilla eri esitys
+  const lod = zoom < 0.3 ? 'dot' : zoom < 0.6 ? 'mini' : zoom < 1.2 ? 'normal' : 'detailed';
 
   // Sulje väripaletti klikkauksesta ulkopuolelle
   useEffect(() => {
@@ -178,18 +182,32 @@ export const StickyNote = React.memo(function StickyNote({ note, onUpdate, onDou
         left: note.x,
         top: note.y,
         zIndex: isEditing ? 10000 : note.z,
-        width: note.width,
-        minHeight: note.height,
         transform: `rotate(${note.rotation}deg)`,
         opacity: fadeOpacity * 0.92,
         background: bgGradient,
         borderColor: isEditing ? '#888' : note.color === '#fafafa' ? '#ddd' : undefined,
+        // LOD: eri koko eri zoom-tasoilla
+        width: lod === 'dot' ? 20 : lod === 'mini' ? 60 : note.width,
+        minHeight: lod === 'dot' ? 20 : lod === 'mini' ? 60 : note.height,
+        padding: lod === 'dot' ? 0 : lod === 'mini' ? 4 : '14px 16px',
+        borderRadius: lod === 'dot' ? 10 : 2,
+        overflow: 'hidden',
+        cursor: lod === 'dot' ? 'pointer' : undefined,
       }}
+      title={lod === 'dot' ? note.content || 'Viesti' : undefined}
       onDoubleClick={handleDoubleClick}
       onMouseDown={handleDragStart}
       onClick={handleClick}
     >
-      {isEditing ? (
+      {lod === 'dot' && (
+        <div style={{ width: 20, height: 20, borderRadius: 10, background: note.color }} />
+      )}
+      {lod === 'mini' && (
+        <div style={{ width: '100%', height: '100%', background: note.color, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+          {note.tags.length > 0 ? '#' : ''}
+        </div>
+      )}
+      {lod !== 'dot' && lod !== 'mini' && isEditing && (
         <>
           {/* Väripaletti */}
           <div style={{ position: 'relative', marginBottom: 6 }}>
@@ -270,7 +288,8 @@ export const StickyNote = React.memo(function StickyNote({ note, onUpdate, onDou
             </span>
           </div>
         </>
-      ) : (
+      )}
+      {lod !== 'dot' && lod !== 'mini' && !isEditing && (
         <>
           <div className="note-content">
             {note.content ? (

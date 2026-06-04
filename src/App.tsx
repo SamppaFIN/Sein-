@@ -409,6 +409,7 @@ export default function App() {
             <StickyNote
               key={note.id}
               note={note}
+              zoom={rafTarget.current.s}
               onUpdate={(data) => updateNote(note.id, data)}
               onDoubleClick={handleNoteDoubleClick}
             />
