@@ -1,11 +1,11 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
-import { useWallStore, useFilteredNotes } from '@/store/useWallStore';
+import { useWallStore } from '@/store/useWallStore';
 import { Toolbar } from '@/components/toolbar/Toolbar';
 import { TagListView } from '@/components/panels/TagListView';
 import { TimeFilter } from '@/components/ui/TimeFilter';
 import { TagBar } from '@/components/ui/TagBar';
 import { ZoomControls } from '@/components/ui/ZoomControls';
-import { StickyNote } from '@/components/notes/StickyNote';
+import { NotesCanvas } from '@/components/canvas/NotesCanvas';
 import { CosmicBackground } from '@/components/background/CosmicBackground';
 import { DevPanel } from '@/components/dev/DevPanel';
 import { InfoButton } from '@/components/ui/InfoButton';
@@ -19,11 +19,10 @@ export default function App() {
   const editingNoteId = useWallStore((s) => s.editingNoteId);
   const setEditingNoteId = useWallStore((s) => s.setEditingNoteId);
   const addNote = useWallStore((s) => s.addNote);
-  const updateNote = useWallStore((s) => s.updateNote);
   const loadNotes = useWallStore((s) => s.loadNotes);
   const setFocusedNoteId = useWallStore((s) => s.setFocusedNoteId);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const notes = useFilteredNotes();
+  const notes = useWallStore((s) => s.notes);
 
   // Ref synkroniseen editointitilan tarkistukseen (välttää closure-ongelmat)
   const editingRef = useRef(editingNoteId);
@@ -431,14 +430,32 @@ export default function App() {
             height: WALL_SIZE,
           }}
         >
-          {notes.map((note) => (
-            <StickyNote
-              key={note.id}
-              note={note}
-              onUpdate={(data) => updateNote(note.id, data)}
-              onDoubleClick={handleNoteDoubleClick}
-            />
-          ))}
+          <NotesCanvas
+            scale={scale}
+            positionX={position.x}
+            positionY={position.y}
+            onNoteClick={(note) => setEditingNoteId(note.id)}
+            onNoteDblClick={(note) => { setFocusedNoteId(note.id); handleNoteDoubleClick(note); }}
+            onCanvasClick={(cx, cy) => {
+              if (editingNoteId) { setEditingNoteId(null); return; }
+              addNote(cx, cy);
+              const r = containerRef.current?.getBoundingClientRect();
+              if (r) { setScale(1.8); setPosition({ x: r.width / 2 - cx * 1.8, y: r.height / 2 - cy * 1.8 }); }
+            }}
+            onPanStart={({ clientX, clientY }) => {
+              setIsPanning(true);
+              setPanStart({ x: clientX - position.x, y: clientY - position.y });
+            }}
+            onPanMove={({ clientX, clientY }) => {
+              if (!isPanning) return;
+              rafPos.current = { x: clientX - panStart.x - position.x, y: clientY - panStart.y - position.y };
+            }}
+            onPanEnd={() => {
+              setIsPanning(false);
+              setPosition({ x: position.x + rafPos.current.x, y: position.y + rafPos.current.y });
+              rafPos.current = { x: 0, y: 0 };
+            }}
+          />
         </div>
       </div>
 
