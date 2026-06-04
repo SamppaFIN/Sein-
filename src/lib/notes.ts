@@ -99,3 +99,26 @@ export function getFadeOpacity(createdAt: string): number {
   if (ageHours < 24 * 90) return 0.3;
   return 0.1;
 }
+
+/** Näkymätön koordinaatisto — laskee kaikkien lappujen rajat */
+export function computeNotesBounds(notes: { x: number; y: number; width: number; height: number }[]) {
+  if (notes.length === 0) return { cx: 2500, cy: 1750, minX: 0, minY: 0, maxX: 5000, maxY: 3500, area: 0 };
+
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const n of notes) {
+    if (n.x < minX) minX = n.x;
+    if (n.y < minY) minY = n.y;
+    if (n.x + n.width > maxX) maxX = n.x + n.width;
+    if (n.y + n.height > maxY) maxY = n.y + n.height;
+  }
+
+  const w = maxX - minX;
+  const h = maxY - minY;
+
+  return {
+    cx: minX + w / 2,   // keskikohta
+    cy: minY + h / 2,
+    minX, minY, maxX, maxY,
+    area: w * h,
+  };
+}

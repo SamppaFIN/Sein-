@@ -11,6 +11,7 @@ import { DevPanel } from '@/components/dev/DevPanel';
 import { InfoButton } from '@/components/ui/InfoButton';
 import { CreateNoteDialog } from '@/components/ui/CreateNoteDialog';
 import type { Note } from '@/types';
+import { computeNotesBounds } from '@/lib/notes';
 
 const WALL_SIZE = 5000;
 
@@ -36,21 +37,22 @@ export default function App() {
     loadNotes();
   }, [loadNotes]);
 
-  // Kun viestit latautuvat, kohdista canvas uusimpaan korttiin
+  // Kun viestit latautuvat, kohdista niiden keskipisteeseen
   useEffect(() => {
     if (notes.length === 0 || hasCentered.current) return;
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    const newest = notes[notes.length - 1];
-    const noteCenterX = newest.x + newest.width / 2;
-    const noteCenterY = newest.y + newest.height / 2;
+    const bounds = computeNotesBounds(notes);
+    const margin = 100;
 
-    setScale(1.5);
-    setPosition({
-      x: rect.width / 2 - noteCenterX * 1.5,
-      y: rect.height / 2 - noteCenterY * 1.5,
-    });
+    // Jos kaikki laput mahtuvat yhteen nippuun, zoomaa sopivasti
+    const maxS = Math.min(rect.width / ((bounds.maxX - bounds.minX) + margin * 2), 1.5);
+    const s = Math.min(maxS, rect.height / ((bounds.maxY - bounds.minY) + margin * 2), 1.5);
+
+    zoomGoal.current = { x: rect.width / 2 - bounds.cx * s, y: rect.height / 2 - bounds.cy * s, s };
+    setScale(s);
+    setPosition({ x: rect.width / 2 - bounds.cx * s, y: rect.height / 2 - bounds.cy * s });
     hasCentered.current = true;
   }, [notes]);
 
@@ -363,15 +365,32 @@ export default function App() {
     if (!rect) return;
     const cx = note.x + note.width / 2;
     const cy = note.y + note.height / 2;
-    setScale(2);
-    setPosition({ x: rect.width / 2 - cx * 2, y: rect.height / 2 - cy * 2 });
-    zoomGoal.current = { x: rect.width / 2 - cx * 2, y: rect.height / 2 - cy * 2, s: 2 };
+    const s = 2;
+    zoomGoal.current = { x: rect.width / 2 - cx * s, y: rect.height / 2 - cy * s, s };
+    setScale(s);
+    setPosition({ x: rect.width / 2 - cx * s, y: rect.height / 2 - cy * s });
   }, []);
 
-  // Zoomaa ulos näyttämään koko seinä
+  // Keskitä kaikkiin lappuihin
   const handleShowAll = useCallback(() => {
-    setScale(0.01);
-    setPosition({ x: 0, y: 0 });
+    const notes = useWallStore.getState().notes;
+    if (notes.length === 0) {
+      zoomGoal.current = { x: 0, y: 0, s: 1 };
+      setScale(1); setPosition({ x: 0, y: 0 });
+      return;
+    }
+    const bounds = computeNotesBounds(notes);
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Valitse skaala niin, että kaikki laput mahtuvat + marginaali
+    const margin = 200;
+    const s = Math.min(
+      Math.min(rect.width / (bounds.maxX - bounds.minX + margin * 2), 1.5),
+      Math.min(rect.height / (bounds.maxY - bounds.minY + margin * 2), 1.5),
+    );
+    zoomGoal.current = { x: rect.width / 2 - bounds.cx * s, y: rect.height / 2 - bounds.cy * s, s };
+    setScale(s);
+    setPosition({ x: rect.width / 2 - bounds.cx * s, y: rect.height / 2 - bounds.cy * s });
   }, []);
 
   // Zoom-napit — keskittävät näkymän keskipisteen mukaan
