@@ -60,7 +60,7 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Kosketustuki (mobiili pan + pinch)
-  const touchRef = useRef({ startX: 0, startY: 0, lastDist: 0, startScale: 1, startPos: { x: 0, y: 0 } });
+  const touchRef = useRef({ startX: 0, startY: 0, lastDist: 0, startScale: 1, startPos: { x: 0, y: 0 }, time: 0, moved: false });
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if ((e.target as HTMLElement).closest('.sticky-note, .toolbar, .tag-bar, .time-filter, .zoom-controls, .info-btn')) return;
@@ -69,6 +69,8 @@ export default function App() {
     t.startX = touch[0].clientX;
     t.startY = touch[0].clientY;
     t.startPos = { x: position.x, y: position.y };
+    t.time = Date.now();
+    t.moved = false;
     if (touch.length === 2) {
       t.lastDist = Math.hypot(touch[0].clientX - touch[1].clientX, touch[0].clientY - touch[1].clientY);
       t.startScale = scale;
@@ -76,25 +78,52 @@ export default function App() {
   }, [position, scale]);
 
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    const t = touchRef.current;
     if (e.touches.length === 1) {
       // Yksi sormi → pan
       const touch = e.touches[0];
-      const t = touchRef.current;
+      const dx = Math.abs(touch.clientX - t.startX);
+      const dy = Math.abs(touch.clientY - t.startY);
+      if (dx > 5 || dy > 5) t.moved = true;
       setPosition({
         x: t.startPos.x + (touch.clientX - t.startX),
         y: t.startPos.y + (touch.clientY - t.startY),
       });
     } else if (e.touches.length === 2) {
-      // Kaksi sormea → pinch zoom
+      t.moved = true;
       const touch0 = e.touches[0];
       const touch1 = e.touches[1];
       const dist = Math.hypot(touch0.clientX - touch1.clientX, touch0.clientY - touch1.clientY);
-      const t = touchRef.current;
       if (t.lastDist > 0) {
         setScale(Math.min(Math.max(0.15, t.startScale * (dist / t.lastDist)), 4));
       }
     }
   }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    const t = touchRef.current;
+    // Jos ei liikuttu ja vain yksi sormi → kyseessä on napautus, luo uusi lappu
+    if (!t.moved && e.changedTouches.length === 1) {
+      const touch = e.changedTouches[0];
+      // Estä jos napautus osuu elementtiin
+      if ((touch.target as HTMLElement).closest('.sticky-note, .toolbar, .tag-bar, .time-filter, .zoom-controls, .info-btn, .tag-list-view')) return;
+
+      const rect = containerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      if (isPanning) return;
+
+      // Tarkista editing tila
+      const currentlyEditing = editingRef.current;
+      if (currentlyEditing) {
+        setEditingNoteId(null);
+        return;
+      }
+
+      const canvasX = (touch.clientX - rect.left - position.x) / scale;
+      const canvasY = (touch.clientY - rect.top - position.y) / scale;
+      addNote(canvasX, canvasY);
+    }
+  }, [isPanning, position, scale, addNote, setEditingNoteId]);
 
   // Zoom käsittely — käytetään addEventListener koska React tekee wheelin passiiviseksi
   useEffect(() => {
@@ -234,6 +263,7 @@ export default function App() {
         onMouseLeave={handleMouseUp}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
         style={{
           width: '100%',
           height: '100%',

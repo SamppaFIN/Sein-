@@ -281,12 +281,6 @@ export function StickyNote({ note, onUpdate, onDoubleClick }: StickyNoteProps) {
           )}
 
           <div className="note-time">
-            {canEdit ? (
-              <span>🖊 {minutesLeft}min</span>
-            ) : (
-              <span>🔒 lukittu</span>
-            )}
-            {' · '}
             {new Date(note.created_at).toLocaleDateString('fi-FI', {
               day: 'numeric',
               month: 'short',
