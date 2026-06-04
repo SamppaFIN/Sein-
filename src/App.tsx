@@ -1,0 +1,223 @@
+import { useCallback, useRef, useState, useEffect } from 'react';
+import { useWallStore, useFilteredNotes } from '@/store/useWallStore';
+import { Toolbar } from '@/components/toolbar/Toolbar';
+import { TagPanel } from '@/components/panels/TagPanel';
+import { TagListView } from '@/components/panels/TagListView';
+import { ZoomControls } from '@/components/ui/ZoomControls';
+import { StickyNote } from '@/components/notes/StickyNote';
+import { CosmicBackground } from '@/components/background/CosmicBackground';
+import { DevPanel } from '@/components/dev/DevPanel';
+import { InfoButton } from '@/components/ui/InfoButton';
+import type { Note } from '@/types';
+
+const WALL_SIZE = 5000;
+
+export default function App() {
+  const editingNoteId = useWallStore((s) => s.editingNoteId);
+  const setEditingNoteId = useWallStore((s) => s.setEditingNoteId);
+  const addNote = useWallStore((s) => s.addNote);
+  const updateNote = useWallStore((s) => s.updateNote);
+  const loadNotes = useWallStore((s) => s.loadNotes);
+  const notes = useFilteredNotes();
+
+  // Ref synkroniseen editointitilan tarkistukseen (välttää closure-ongelmat)
+  const editingRef = useRef(editingNoteId);
+  editingRef.current = editingNoteId;
+
+  // Lataa viestit tietokannasta kun sovellus käynnistyy
+  useEffect(() => {
+    loadNotes();
+  }, [loadNotes]);
+
+  // Zoom/pan -tila
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Zoom käsittely — käytetään addEventListener koska React tekee wheelin passiiviseksi
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setScale((prev) => Math.min(Math.max(0.15, prev + delta), 4));
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  }, []);
+
+  // Pan käsittely (raahaus tyhjästä kohdasta)
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    // Vain tyhjästä taustasta — ei lapusta
+    if ((e.target as HTMLElement).closest('.sticky-note')) return;
+    if ((e.target as HTMLElement).closest('.toolbar, .tag-panel, .zoom-controls')) return;
+
+    setIsPanning(true);
+    setPanStart({ x: e.clientX - position.x, y: e.clientY - position.y });
+  }, [position]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isPanning) return;
+    setPosition({
+      x: e.clientX - panStart.x,
+      y: e.clientY - panStart.y,
+    });
+  }, [isPanning, panStart]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsPanning(false);
+  }, []);
+
+  // Klikkaus tyhjään → sulje editointi TAI luo uusi lappu
+  const handleCanvasClick = useCallback((e: React.MouseEvent) => {
+    if (isPanning) return;
+    if ((e.target as HTMLElement).closest('.sticky-note')) return;
+
+    const currentlyEditing = editingRef.current;
+    if (currentlyEditing) {
+      // Tarkista DOM:sta onko textarea:ssa oikeaa sisältöä (store on vanhentunut)
+      const textarea = document.querySelector('.sticky-note.editing textarea') as HTMLTextAreaElement | null;
+      const value = textarea?.value ?? '';
+      const isEmpty = value.trim() === '' || value === 'Kirjoita uusi viesti seinälle';
+
+      if (isEmpty) {
+        // Tyhjä tarra — siirrä klikkauskohtaan
+        const rect = containerRef.current?.getBoundingClientRect();
+        if (rect) {
+          const canvasX = (e.clientX - rect.left - position.x) / scale;
+          const canvasY = (e.clientY - rect.top - position.y) / scale;
+          useWallStore.getState().updateNote(currentlyEditing, { x: canvasX, y: canvasY });
+        }
+        return;
+      }
+
+      // Tarraan on kirjoitettu — tallenna ja sulje
+      setEditingNoteId(null);
+      return;
+    }
+
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const canvasX = (e.clientX - rect.left - position.x) / scale;
+    const canvasY = (e.clientY - rect.top - position.y) / scale;
+
+    addNote(canvasX, canvasY);
+  }, [addNote, isPanning, position, scale, setEditingNoteId]);
+
+  // Tuplaklikkaus lappuun → keskitä ja zoomaa
+  const handleNoteDoubleClick = useCallback((note: Note) => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const noteCenterX = note.x + note.width / 2;
+    const noteCenterY = note.y + note.height / 2;
+    const targetScale = 2;
+
+    setScale(targetScale);
+    setPosition({
+      x: rect.width / 2 - noteCenterX * targetScale,
+      y: rect.height / 2 - noteCenterY * targetScale,
+    });
+  }, []);
+
+  // Zoom-napit
+  const zoomIn = () => setScale((s) => Math.min(s + 0.2, 4));
+  const zoomOut = () => setScale((s) => Math.max(s - 0.2, 0.15));
+  const zoomReset = () => {
+    setScale(1);
+    setPosition({ x: 0, y: 0 });
+  };
+
+  return (
+    <div
+      className="no-select"
+      style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative', zIndex: 1 }}
+    >
+      {/* Kosminen tausta */}
+      <CosmicBackground />
+
+      <Toolbar />
+      <TagPanel />
+      <TagListView />
+
+      <div
+        ref={containerRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        style={{
+          width: '100%',
+          height: '100%',
+          cursor: isPanning ? 'grabbing' : 'grab',
+          overflow: 'hidden',
+          position: 'relative',
+          background: 'transparent',
+        }}
+      >
+        {/* Ääretön canvas-kerros */}
+        <div
+          className="wall-canvas"
+          onClick={handleCanvasClick}
+          style={{
+            width: WALL_SIZE,
+            height: WALL_SIZE,
+            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+            transformOrigin: '0 0',
+            transition: isPanning ? 'none' : 'transform 0.05s ease-out',
+          }}
+        >
+          {notes.map((note) => (
+            <StickyNote
+              key={note.id}
+              note={note}
+              onUpdate={(data) => updateNote(note.id, data)}
+              onDoubleClick={handleNoteDoubleClick}
+            />
+          ))}
+        </div>
+      </div>
+
+      <ZoomControls
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        onReset={zoomReset}
+        scale={scale}
+      />
+
+      <DevPanel />
+      <InfoButton />
+
+      {/* Ohjeistus uudelle käyttäjälle */}
+      {notes.length === 0 && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            textAlign: 'center',
+            color: 'rgba(255,255,255,0.7)',
+            pointerEvents: 'none',
+            zIndex: 5000,
+            textShadow: '0 0 20px rgba(100,150,255,0.5)',
+          }}
+        >
+          <div style={{ fontSize: 56, marginBottom: 16 }}>⚡</div>
+          <div style={{ fontSize: 20, marginBottom: 8, fontWeight: 500 }}>
+            Klikkaa seinää ja jätä viesti
+          </div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.45)' }}>
+            Raahaa tyhjästä kohdasta liikkuaksesi • Rullaa zoomataksesi
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

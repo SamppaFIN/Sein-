@@ -1,0 +1,27 @@
+# Riippuvuudet
+node_modules/
+
+# Build
+dist/
+
+# Ympäristömuuttujat
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Supabase (paikallinen)
+supabase/.branches/
+supabase/.temp/
+
+# Debug
+*.log
