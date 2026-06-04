@@ -59,6 +59,43 @@ export default function App() {
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Kosketustuki (mobiili pan + pinch)
+  const touchRef = useRef({ startX: 0, startY: 0, lastDist: 0, startScale: 1, startPos: { x: 0, y: 0 } });
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if ((e.target as HTMLElement).closest('.sticky-note, .toolbar, .tag-bar, .time-filter, .zoom-controls, .info-btn')) return;
+    const touch = e.touches;
+    const t = touchRef.current;
+    t.startX = touch[0].clientX;
+    t.startY = touch[0].clientY;
+    t.startPos = { x: position.x, y: position.y };
+    if (touch.length === 2) {
+      t.lastDist = Math.hypot(touch[0].clientX - touch[1].clientX, touch[0].clientY - touch[1].clientY);
+      t.startScale = scale;
+    }
+  }, [position, scale]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (e.touches.length === 1) {
+      // Yksi sormi → pan
+      const touch = e.touches[0];
+      const t = touchRef.current;
+      setPosition({
+        x: t.startPos.x + (touch.clientX - t.startX),
+        y: t.startPos.y + (touch.clientY - t.startY),
+      });
+    } else if (e.touches.length === 2) {
+      // Kaksi sormea → pinch zoom
+      const touch0 = e.touches[0];
+      const touch1 = e.touches[1];
+      const dist = Math.hypot(touch0.clientX - touch1.clientX, touch0.clientY - touch1.clientY);
+      const t = touchRef.current;
+      if (t.lastDist > 0) {
+        setScale(Math.min(Math.max(0.15, t.startScale * (dist / t.lastDist)), 4));
+      }
+    }
+  }, []);
+
   // Zoom käsittely — käytetään addEventListener koska React tekee wheelin passiiviseksi
   useEffect(() => {
     const el = containerRef.current;
@@ -154,6 +191,20 @@ export default function App() {
     });
   }, []);
 
+  // Satunnainen lappu
+  const handleRandomNote = useCallback(() => {
+    const filtered = useFilteredNotes();
+    if (filtered.length === 0) return;
+    const randomIdx = Math.floor(Math.random() * filtered.length);
+    const note = filtered[randomIdx];
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = note.x + note.width / 2;
+    const cy = note.y + note.height / 2;
+    setScale(2);
+    setPosition({ x: rect.width / 2 - cx * 2, y: rect.height / 2 - cy * 2 });
+  }, []);
+
   // Zoom-napit
   const zoomIn = () => setScale((s) => Math.min(s + 0.2, 4));
   const zoomOut = () => setScale((s) => Math.max(s - 0.2, 0.15));
@@ -170,7 +221,7 @@ export default function App() {
       {/* Kosminen tausta */}
       <CosmicBackground />
 
-      <Toolbar />
+      <Toolbar onRandomNote={handleRandomNote} />
       <TimeFilter />
       <TagBar />
       <TagListView />
@@ -181,6 +232,8 @@ export default function App() {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
         style={{
           width: '100%',
           height: '100%',

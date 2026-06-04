@@ -2,7 +2,11 @@ import { useWallStore } from '@/store/useWallStore';
 import { PRESET_COLORS } from '@/types';
 import { randomColor } from '@/lib/notes';
 
-export function Toolbar() {
+interface ToolbarProps {
+  onRandomNote: () => void;
+}
+
+export function Toolbar({ onRandomNote }: ToolbarProps) {
   const notesCount = useWallStore((s) => s.notes.length);
   const editingNoteId = useWallStore((s) => s.editingNoteId);
   const activeColor = useWallStore((s) => s.activeColor);
@@ -33,10 +37,15 @@ export function Toolbar() {
 
       <div className="divider" />
 
-      {/* Info */}
-      <span style={{ fontSize: 13, color: '#999', padding: '8px 6px', alignSelf: 'center', whiteSpace: 'nowrap' }}>
-        {editingNoteId ? '✏️ Muokataan...' : `${notesCount} viestiä`}
-      </span>
+      {/* Satunnainen lappu -nappi */}
+      <button
+        className="toolbar-random-btn"
+        onClick={onRandomNote}
+        disabled={notesCount === 0}
+        title={editingNoteId ? '✏️ Muokataan...' : `Avaa satunnainen viesti (${notesCount} kpl)`}
+      >
+        {editingNoteId ? '✏️' : `🎲 ${notesCount}`}
+      </button>
 
       {activeListViewTag && (
         <>
