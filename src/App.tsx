@@ -166,34 +166,41 @@ export default function App() {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
 
-      setScale((prev) => {
-        const delta = e.deltaY > 0 ? -0.08 : 0.08;
-        const newScale = Math.min(Math.max(0.01, prev + delta), 4);
+      // Päivitä RAF-kohde HETI ja React-tila samalla
+      const oldScale = rafTarget.current.s;
+      const oldX = rafTarget.current.x;
+      const oldY = rafTarget.current.y;
 
-        setPosition((pos) => {
-          // Jos on fokusoitu lappu, pidä se keskipisteenä
-          const focusId = useWallStore.getState().focusedNoteId;
-          if (focusId) {
-            const note = useWallStore.getState().notes.find((n) => n.id === focusId);
-            if (note) {
-              const cx = note.x + note.width / 2;
-              const cy = note.y + note.height / 2;
-              return {
-                x: rect.width / 2 - cx * newScale,
-                y: rect.height / 2 - cy * newScale,
-              };
-            }
-          }
-          // Muuten zoomaa hiiren kohdalta
+      const delta = e.deltaY > 0 ? -0.08 : 0.08;
+      const newScale = Math.min(Math.max(0.01, oldScale + delta), 4);
+
+      let newX: number, newY: number;
+      const focusId = useWallStore.getState().focusedNoteId;
+
+      if (focusId) {
+        const note = useWallStore.getState().notes.find((n) => n.id === focusId);
+        if (note) {
+          const cx = note.x + note.width / 2;
+          const cy = note.y + note.height / 2;
+          newX = rect.width / 2 - cx * newScale;
+          newY = rect.height / 2 - cy * newScale;
+        } else {
           const cursorX = (e.clientX - rect.left);
           const cursorY = (e.clientY - rect.top);
-          return {
-            x: cursorX - (cursorX - pos.x) * (newScale / prev),
-            y: cursorY - (cursorY - pos.y) * (newScale / prev),
-          };
-        });
-        return newScale;
-      });
+          newX = cursorX - (cursorX - oldX) * (newScale / oldScale);
+          newY = cursorY - (cursorY - oldY) * (newScale / oldScale);
+        }
+      } else {
+        const cursorX = (e.clientX - rect.left);
+        const cursorY = (e.clientY - rect.top);
+        newX = cursorX - (cursorX - oldX) * (newScale / oldScale);
+        newY = cursorY - (cursorY - oldY) * (newScale / oldScale);
+      }
+
+      // Päivitä RAF (välittömästi) ja React-tila (synkronointia varten)
+      rafTarget.current = { x: newX, y: newY, s: newScale };
+      setPosition({ x: newX, y: newY });
+      setScale(newScale);
     };
 
     el.addEventListener('wheel', handleWheel, { passive: false });
@@ -268,11 +275,11 @@ export default function App() {
     // Zoomaa uuteen lappuun
     const rect2 = containerRef.current?.getBoundingClientRect();
     if (rect2) {
+      const x = rect2.width / 2 - canvasX * 1.8;
+      const y = rect2.height / 2 - canvasY * 1.8;
       setScale(1.8);
-      setPosition({
-        x: rect2.width / 2 - canvasX * 1.8,
-        y: rect2.height / 2 - canvasY * 1.8,
-      });
+      setPosition({ x, y });
+      rafTarget.current = { x, y, s: 1.8 };
     }
   }, [addNote, isPanning, position, scale, setEditingNoteId, setFocusedNoteId]);
 
@@ -290,6 +297,12 @@ export default function App() {
       x: rect.width / 2 - noteCenterX * targetScale,
       y: rect.height / 2 - noteCenterY * targetScale,
     });
+    // Päivitä RAF-kohde HETI (ei odota React-renderöintiä)
+    rafTarget.current = {
+      x: rect.width / 2 - noteCenterX * targetScale,
+      y: rect.height / 2 - noteCenterY * targetScale,
+      s: targetScale,
+    };
   }, []);
 
   // Satunnainen lappu
@@ -304,6 +317,7 @@ export default function App() {
     const cy = note.y + note.height / 2;
     setScale(2);
     setPosition({ x: rect.width / 2 - cx * 2, y: rect.height / 2 - cy * 2 });
+    rafTarget.current = { x: rect.width / 2 - cx * 2, y: rect.height / 2 - cy * 2, s: 2 };
   }, []);
 
   // Zoomaa ulos näyttämään koko seinä
@@ -317,21 +331,28 @@ export default function App() {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const focusId = useWallStore.getState().focusedNoteId;
-    setScale((prev) => {
-      const newS = Math.min(Math.max(prev + dir * 0.3, 0.01), 4);
-      setPosition(() => {
-        if (focusId) {
-          const note = useWallStore.getState().notes.find((n) => n.id === focusId);
-          if (note) {
-            const cx = note.x + note.width / 2;
-            const cy = note.y + note.height / 2;
-            return { x: rect.width / 2 - cx * newS, y: rect.height / 2 - cy * newS };
-          }
-        }
-        return { x: rect.width / 2 - (rect.width / 2 - position.x) * (newS / prev), y: rect.height / 2 - (rect.height / 2 - position.y) * (newS / prev) };
-      });
-      return newS;
-    });
+    const oldS = rafTarget.current.s;
+    const newS = Math.min(Math.max(oldS + dir * 0.3, 0.01), 4);
+
+    let newX = rafTarget.current.x;
+    let newY = rafTarget.current.y;
+
+    if (focusId) {
+      const note = useWallStore.getState().notes.find((n) => n.id === focusId);
+      if (note) {
+        const cx = note.x + note.width / 2;
+        const cy = note.y + note.height / 2;
+        newX = rect.width / 2 - cx * newS;
+        newY = rect.height / 2 - cy * newS;
+      }
+    } else {
+      newX = rect.width / 2 - (rect.width / 2 - rafTarget.current.x) * (newS / oldS);
+      newY = rect.height / 2 - (rect.height / 2 - rafTarget.current.y) * (newS / oldS);
+    }
+
+    rafTarget.current = { x: newX, y: newY, s: newS };
+    setPosition({ x: newX, y: newY });
+    setScale(newS);
   };
 
   const zoomIn = () => zoomCentered(1);
