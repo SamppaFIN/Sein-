@@ -9,6 +9,7 @@ import { StickyNote } from '@/components/notes/StickyNote';
 import { CosmicBackground } from '@/components/background/CosmicBackground';
 import { DevPanel } from '@/components/dev/DevPanel';
 import { InfoButton } from '@/components/ui/InfoButton';
+import { CreateNoteDialog } from '@/components/ui/CreateNoteDialog';
 import type { Note } from '@/types';
 
 const WALL_SIZE = 5000;
@@ -20,6 +21,7 @@ export default function App() {
   const updateNote = useWallStore((s) => s.updateNote);
   const loadNotes = useWallStore((s) => s.loadNotes);
   const setFocusedNoteId = useWallStore((s) => s.setFocusedNoteId);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const notes = useFilteredNotes();
 
   // Ref synkroniseen editointitilan tarkistukseen (välttää closure-ongelmat)
@@ -348,7 +350,8 @@ export default function App() {
       {/* Kosminen tausta */}
       <CosmicBackground />
 
-      <Toolbar onRandomNote={handleRandomNote} />
+      <Toolbar onRandomNote={handleRandomNote} onNewNote={() => setShowCreateDialog(true)} />
+      {showCreateDialog && <CreateNoteDialog onClose={() => setShowCreateDialog(false)} />}
       <TimeFilter />
       <TagBar />
       <TagListView />

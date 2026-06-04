@@ -4,9 +4,10 @@ import { randomColor } from '@/lib/notes';
 
 interface ToolbarProps {
   onRandomNote: () => void;
+  onNewNote: () => void;
 }
 
-export function Toolbar({ onRandomNote }: ToolbarProps) {
+export function Toolbar({ onRandomNote, onNewNote }: ToolbarProps) {
   const notesCount = useWallStore((s) => s.notes.length);
   const editingNoteId = useWallStore((s) => s.editingNoteId);
   const activeColor = useWallStore((s) => s.activeColor);
@@ -15,6 +16,13 @@ export function Toolbar({ onRandomNote }: ToolbarProps) {
 
   return (
     <div className="toolbar no-select">
+      {/* Uusi viesti -nappi */}
+      <button className="toolbar-new-btn" onClick={onNewNote} title="Luo uusi viesti">
+        ✏️ Uusi
+      </button>
+
+      <div className="divider" />
+
       {/* Väripaletti uusille tarroille */}
       <div style={{ display: 'flex', gap: 3, alignItems: 'center', padding: '0 4px' }}>
         {PRESET_COLORS.map((c) => (

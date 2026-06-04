@@ -21,7 +21,7 @@ interface WallState {
   focusedNoteId: string | null;
 
   loadNotes: () => Promise<void>;
-  addNote: (x: number, y: number) => void;
+  addNote: (x: number, y: number, color?: string, content?: string) => void;
   removeNote: (id: string) => void;
   updateNote: (id: string, data: Partial<Note>) => void;
   seedNotes: (count: number) => Promise<void>;
@@ -69,11 +69,11 @@ export const useWallStore = create<WallState>((set, get) => ({
     set({ notes, allTags, isLoading: false });
   },
 
-  addNote: async (x, y) => {
+  addNote: async (x, y, color?, content?) => {
     const { notes, editingNoteId } = get();
     if (editingNoteId !== null) return;
 
-    const newNote = createStickyNote(x, y, notes.length + 1);
+    const newNote = createStickyNote(x, y, notes.length + 1, content, color);
 
     // Optimistinen lokaali lisäys — ei rollbackia vaikka DB kaatuisi
     set({ notes: [...notes, newNote], editingNoteId: newNote.id });

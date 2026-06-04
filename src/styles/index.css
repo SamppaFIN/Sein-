@@ -588,6 +588,25 @@ html, body, #root {
   cursor: default;
 }
 
+/* Uusi viesti -nappi */
+.toolbar-new-btn {
+  padding: 6px 14px !important;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.15s;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #fff !important;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.toolbar-new-btn:hover {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
 .toolbar .divider {
   background: rgba(255, 255, 255, 0.1);
 }
