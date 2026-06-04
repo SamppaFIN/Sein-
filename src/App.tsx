@@ -147,7 +147,7 @@ export default function App() {
     }
   }, [isPanning, addNote, setEditingNoteId, setFocusedNoteId]);
 
-  // Zoom käsittely — keskittää hiiren tai keskipisteen mukaan
+  // Zoom käsittely — keskittää fokusoituun taikka hiiren mukaan
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -155,17 +155,33 @@ export default function App() {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
-      const cursorX = (e.clientX - rect.left);
-      const cursorY = (e.clientY - rect.top);
 
       setScale((prev) => {
         const delta = e.deltaY > 0 ? -0.08 : 0.08;
         const newScale = Math.min(Math.max(0.01, prev + delta), 4);
-        // Säädä positio niin, että hiiren alla oleva kohta pysyy paikallaan
-        setPosition((pos) => ({
-          x: cursorX - (cursorX - pos.x) * (newScale / prev),
-          y: cursorY - (cursorY - pos.y) * (newScale / prev),
-        }));
+
+        setPosition((pos) => {
+          // Jos on fokusoitu lappu, pidä se keskipisteenä
+          const focusId = useWallStore.getState().focusedNoteId;
+          if (focusId) {
+            const note = useWallStore.getState().notes.find((n) => n.id === focusId);
+            if (note) {
+              const cx = note.x + note.width / 2;
+              const cy = note.y + note.height / 2;
+              return {
+                x: rect.width / 2 - cx * newScale,
+                y: rect.height / 2 - cy * newScale,
+              };
+            }
+          }
+          // Muuten zoomaa hiiren kohdalta
+          const cursorX = (e.clientX - rect.left);
+          const cursorY = (e.clientY - rect.top);
+          return {
+            x: cursorX - (cursorX - pos.x) * (newScale / prev),
+            y: cursorY - (cursorY - pos.y) * (newScale / prev),
+          };
+        });
         return newScale;
       });
     };
@@ -287,29 +303,29 @@ export default function App() {
   }, []);
 
   // Zoom-napit — keskittävät näkymän keskipisteen mukaan
-  const zoomIn = () => {
+  const zoomCentered = (dir: number) => {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
+    const focusId = useWallStore.getState().focusedNoteId;
     setScale((prev) => {
-      const newS = Math.min(prev + 0.3, 4);
-      setPosition((pos) => ({ x: cx - (cx - pos.x) * (newS / prev), y: cy - (cy - pos.y) * (newS / prev) }));
+      const newS = Math.min(Math.max(prev + dir * 0.3, 0.01), 4);
+      setPosition(() => {
+        if (focusId) {
+          const note = useWallStore.getState().notes.find((n) => n.id === focusId);
+          if (note) {
+            const cx = note.x + note.width / 2;
+            const cy = note.y + note.height / 2;
+            return { x: rect.width / 2 - cx * newS, y: rect.height / 2 - cy * newS };
+          }
+        }
+        return { x: rect.width / 2 - (rect.width / 2 - position.x) * (newS / prev), y: rect.height / 2 - (rect.height / 2 - position.y) * (newS / prev) };
+      });
       return newS;
     });
   };
 
-  const zoomOut = () => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const cx = rect.width / 2;
-    const cy = rect.height / 2;
-    setScale((prev) => {
-      const newS = Math.max(prev - 0.3, 0.01);
-      setPosition((pos) => ({ x: cx - (cx - pos.x) * (newS / prev), y: cy - (cy - pos.y) * (newS / prev) }));
-      return newS;
-    });
-  };
+  const zoomIn = () => zoomCentered(1);
+  const zoomOut = () => zoomCentered(-1);
 
   const zoomReset = () => {
     setScale(1);
