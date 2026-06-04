@@ -251,8 +251,8 @@ export default function App() {
         // Tyhjä tarra — siirrä klikkauskohtaan
         const rect = containerRef.current?.getBoundingClientRect();
         if (rect) {
-          const canvasX = (e.clientX - rect.left - position.x) / scale;
-          const canvasY = (e.clientY - rect.top - position.y) / scale;
+          const canvasX = (e.clientX - rect.left - rafTarget.current.x) / rafTarget.current.s;
+          const canvasY = (e.clientY - rect.top - rafTarget.current.y) / rafTarget.current.s;
           useWallStore.getState().updateNote(currentlyEditing, { x: canvasX, y: canvasY });
         }
         return;
@@ -266,22 +266,26 @@ export default function App() {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    const canvasX = (e.clientX - rect.left - position.x) / scale;
-    const canvasY = (e.clientY - rect.top - position.y) / scale;
+    // Käytä rafTargetia sulkeman varassa olevan React-tilan sijaan
+    const currentScale = rafTarget.current.s;
+    const currentX = rafTarget.current.x;
+    const currentY = rafTarget.current.y;
+
+    const canvasX = (e.clientX - rect.left - currentX) / currentScale;
+    const canvasY = (e.clientY - rect.top - currentY) / currentScale;
 
     addNote(canvasX, canvasY);
     setFocusedNoteId(null);
 
-    // Zoomaa uuteen lappuun
-    const rect2 = containerRef.current?.getBoundingClientRect();
-    if (rect2) {
-      const x = rect2.width / 2 - canvasX * 1.8;
-      const y = rect2.height / 2 - canvasY * 1.8;
+    // Zoomaa uuteen lappuun — käytä instant RAF + React sync
+    if (rect) {
+      const x = rect.width / 2 - canvasX * 1.8;
+      const y = rect.height / 2 - canvasY * 1.8;
+      rafTarget.current = { x, y, s: 1.8 };
       setScale(1.8);
       setPosition({ x, y });
-      rafTarget.current = { x, y, s: 1.8 };
     }
-  }, [addNote, isPanning, position, scale, setEditingNoteId, setFocusedNoteId]);
+  }, [addNote, isPanning, setEditingNoteId, setFocusedNoteId]);
 
   // Tuplaklikkaus lappuun → keskitä ja zoomaa
   const handleNoteDoubleClick = useCallback((note: Note) => {

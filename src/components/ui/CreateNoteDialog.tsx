@@ -19,14 +19,7 @@ export function CreateNoteDialog({ onClose }: CreateNoteDialogProps) {
 
   const handleCreate = () => {
     if (content.trim() === '') return;
-
-    // Sijoita lappu näkymän keskelle + satunnainen heitto
-    addNote(
-      window.innerWidth / 2 - 500 + Math.random() * 500,
-      window.innerHeight / 2 - 300 + Math.random() * 300,
-      color,
-      content,
-    );
+    addNote(300, 300, color, content);
 
     onClose();
   };
