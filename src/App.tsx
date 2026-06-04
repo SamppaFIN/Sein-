@@ -122,8 +122,14 @@ export default function App() {
       const canvasX = (touch.clientX - rect.left - position.x) / scale;
       const canvasY = (touch.clientY - rect.top - position.y) / scale;
       addNote(canvasX, canvasY);
-    }
-  }, [isPanning, position, scale, addNote, setEditingNoteId]);
+      setFocusedNoteId(null);
+      // Zoomaa uuteen
+      setTimeout(() => {
+        const r = containerRef.current?.getBoundingClientRect();
+        if (r) { setScale(1.8); setPosition({ x: r.width / 2 - canvasX * 1.8, y: r.height / 2 - canvasY * 1.8 }); }
+      }, 50);
+    } // sulje if-block
+  }, [isPanning, position, scale, addNote, setEditingNoteId, setFocusedNoteId]);
 
   // Zoom käsittely — käytetään addEventListener koska React tekee wheelin passiiviseksi
   useEffect(() => {
@@ -202,6 +208,16 @@ export default function App() {
 
     addNote(canvasX, canvasY);
     setFocusedNoteId(null);
+
+    // Zoomaa uuteen lappuun
+    const rect2 = containerRef.current?.getBoundingClientRect();
+    if (rect2) {
+      setScale(1.8);
+      setPosition({
+        x: rect2.width / 2 - canvasX * 1.8,
+        y: rect2.height / 2 - canvasY * 1.8,
+      });
+    }
   }, [addNote, isPanning, position, scale, setEditingNoteId, setFocusedNoteId]);
 
   // Tuplaklikkaus lappuun → keskitä ja zoomaa
@@ -232,6 +248,12 @@ export default function App() {
     const cy = note.y + note.height / 2;
     setScale(2);
     setPosition({ x: rect.width / 2 - cx * 2, y: rect.height / 2 - cy * 2 });
+  }, []);
+
+  // Zoomaa ulos näyttämään koko seinä
+  const handleShowAll = useCallback(() => {
+    setScale(0.25);
+    setPosition({ x: 0, y: 0 });
   }, []);
 
   // Zoom-napit
@@ -300,6 +322,7 @@ export default function App() {
         onZoomIn={zoomIn}
         onZoomOut={zoomOut}
         onReset={zoomReset}
+        onShowAll={handleShowAll}
         scale={scale}
       />
 
