@@ -36,18 +36,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Create env file
-        run: |
-          cat > .env << EOF
-          VITE_SUPABASE_URL=${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY=${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          EOF
-
       - name: Build
         run: npm run build
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_SUPABASE_URL: https://zzhmdwqdektysodniniw.supabase.co
+          VITE_SUPABASE_ANON_KEY: sb_publishable_A0LSFoqvd6aB46WXVxOHxA_68VqavSA
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
