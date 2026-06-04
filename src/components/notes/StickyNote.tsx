@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Note } from '@/types';
@@ -12,7 +12,7 @@ interface StickyNoteProps {
   onDoubleClick: (note: Note) => void;
 }
 
-export function StickyNote({ note, onUpdate, onDoubleClick }: StickyNoteProps) {
+export const StickyNote = React.memo(function StickyNote({ note, onUpdate, onDoubleClick }: StickyNoteProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
   const [localContent, setLocalContent] = useState(note.content);
@@ -311,4 +311,4 @@ export function StickyNote({ note, onUpdate, onDoubleClick }: StickyNoteProps) {
       )}
     </div>
   );
-}
+});

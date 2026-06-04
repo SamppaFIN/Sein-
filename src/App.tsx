@@ -53,17 +53,39 @@ export default function App() {
   }, [notes]);
 
   // Zoom/pan -tila
+  // Zoom/pan -tila — käytetään ref:iä reaaliaikaiseen renderöintiin
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+  const wallRef = useRef<HTMLDivElement>(null);
 
-  // Kosketustuki (mobiili pan + pinch)
+  // RAF-pohjainen transform-päivitys (60 FPS, ei React-renderöintiä kesken liikkeen)
+  const rafTarget = useRef({ x: 0, y: 0, s: 1 });
+  const rafId = useRef(0);
+  const rafLoop = useCallback(() => {
+    const el = wallRef.current;
+    if (!el) return;
+    const t = rafTarget.current;
+    el.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.s})`;
+    rafId.current = requestAnimationFrame(rafLoop);
+  }, []);
+
+  // Käynnistä RAF-silmukka
+  useEffect(() => {
+    rafId.current = requestAnimationFrame(rafLoop);
+    return () => cancelAnimationFrame(rafId.current);
+  }, [rafLoop]);
+
+  // Päivitä RAF-kohde aina kun scale tai position muuttuu
+  useEffect(() => { rafTarget.current = { x: position.x, y: position.y, s: scale }; }, [position, scale]);
+
+  // Kosketustuki — päivittää suoraan ref:iä, ei React-tilaa (smooth mobiili)
   const touchRef = useRef({ startX: 0, startY: 0, lastDist: 0, startScale: 1, startPos: { x: 0, y: 0 }, time: 0, moved: false });
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if ((e.target as HTMLElement).closest('.sticky-note, .toolbar, .tag-bar, .time-filter, .zoom-controls, .info-btn')) return;
+    if ((e.target as HTMLElement).closest('.sticky-note, .toolbar, .tag-bar, .time-filter, .zoom-controls, .info-btn, .tag-list-view')) return;
     const touch = e.touches;
     const t = touchRef.current;
     t.startX = touch[0].clientX;
@@ -80,56 +102,50 @@ export default function App() {
   const handleTouchMove = useCallback((e: React.TouchEvent) => {
     const t = touchRef.current;
     if (e.touches.length === 1) {
-      // Yksi sormi → pan
       const touch = e.touches[0];
       const dx = Math.abs(touch.clientX - t.startX);
       const dy = Math.abs(touch.clientY - t.startY);
       if (dx > 5 || dy > 5) t.moved = true;
-      setPosition({
+      // Päivitä suoraan RAF-kohdetta (ei React-tilaa → smooth)
+      rafTarget.current = {
         x: t.startPos.x + (touch.clientX - t.startX),
         y: t.startPos.y + (touch.clientY - t.startY),
-      });
+        s: scale,
+      };
     } else if (e.touches.length === 2) {
       t.moved = true;
       const touch0 = e.touches[0];
       const touch1 = e.touches[1];
       const dist = Math.hypot(touch0.clientX - touch1.clientX, touch0.clientY - touch1.clientY);
       if (t.lastDist > 0) {
-        setScale(Math.min(Math.max(0.15, t.startScale * (dist / t.lastDist)), 4));
+        const newScale = Math.min(Math.max(0.01, t.startScale * (dist / t.lastDist)), 4);
+        rafTarget.current = { ...rafTarget.current, s: newScale };
       }
     }
-  }, []);
+  }, [scale]);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    // Synkronoi ref → React-tila kun liike loppuu
+    setPosition({ x: rafTarget.current.x, y: rafTarget.current.y });
+    setScale(rafTarget.current.s);
     const t = touchRef.current;
-    // Jos ei liikuttu ja vain yksi sormi → kyseessä on napautus, luo uusi lappu
     if (!t.moved && e.changedTouches.length === 1) {
       const touch = e.changedTouches[0];
-      // Estä jos napautus osuu elementtiin
       if ((touch.target as HTMLElement).closest('.sticky-note, .toolbar, .tag-bar, .time-filter, .zoom-controls, .info-btn, .tag-list-view')) return;
-
       const rect = containerRef.current?.getBoundingClientRect();
-      if (!rect) return;
-      if (isPanning) return;
-
-      // Tarkista editing tila
+      if (!rect || isPanning) return;
       const currentlyEditing = editingRef.current;
-      if (currentlyEditing) {
-        setEditingNoteId(null);
-        return;
-      }
-
-      const canvasX = (touch.clientX - rect.left - position.x) / scale;
-      const canvasY = (touch.clientY - rect.top - position.y) / scale;
+      if (currentlyEditing) { setEditingNoteId(null); return; }
+      const canvasX = (touch.clientX - rect.left - rafTarget.current.x) / rafTarget.current.s;
+      const canvasY = (touch.clientY - rect.top - rafTarget.current.y) / rafTarget.current.s;
       addNote(canvasX, canvasY);
       setFocusedNoteId(null);
-      // Zoomaa uuteen
       setTimeout(() => {
         const r = containerRef.current?.getBoundingClientRect();
-        if (r) { setScale(1.8); setPosition({ x: r.width / 2 - canvasX * 1.8, y: r.height / 2 - canvasY * 1.8 }); }
+        if (r) { setScale(1.8); rafTarget.current.s = 1.8; setPosition({ x: r.width / 2 - canvasX * 1.8, y: r.height / 2 - canvasY * 1.8 }); rafTarget.current.x = r.width / 2 - canvasX * 1.8; rafTarget.current.y = r.height / 2 - canvasY * 1.8; }
       }, 50);
-    } // sulje if-block
-  }, [isPanning, position, scale, addNote, setEditingNoteId, setFocusedNoteId]);
+    }
+  }, [isPanning, addNote, setEditingNoteId, setFocusedNoteId]);
 
   // Zoom käsittely — keskittää hiiren tai keskipisteen mukaan
   useEffect(() => {
@@ -160,24 +176,26 @@ export default function App() {
 
   // Pan käsittely (raahaus tyhjästä kohdasta)
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Vain tyhjästä taustasta — ei lapusta
     if ((e.target as HTMLElement).closest('.sticky-note')) return;
-    if ((e.target as HTMLElement).closest('.toolbar, .tag-panel, .zoom-controls')) return;
-
+    if ((e.target as HTMLElement).closest('.toolbar, .tag-panel, .zoom-controls, .tag-bar, .time-filter, .info-btn')) return;
     setIsPanning(true);
     setPanStart({ x: e.clientX - position.x, y: e.clientY - position.y });
   }, [position]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!isPanning) return;
-    setPosition({
+    // Päivitä suoraan RAF-kohdetta smooth pan
+    rafTarget.current = {
       x: e.clientX - panStart.x,
       y: e.clientY - panStart.y,
-    });
-  }, [isPanning, panStart]);
+      s: scale,
+    };
+  }, [isPanning, panStart, scale]);
 
   const handleMouseUp = useCallback(() => {
     setIsPanning(false);
+    // Synkronoi ref → React-tila
+    setPosition({ x: rafTarget.current.x, y: rafTarget.current.y });
   }, []);
 
   // Klikkaus tyhjään → sulje editointi TAI luo uusi lappu
@@ -332,13 +350,11 @@ export default function App() {
         {/* Ääretön canvas-kerros */}
         <div
           className="wall-canvas"
+          ref={wallRef}
           onClick={handleCanvasClick}
           style={{
             width: WALL_SIZE,
             height: WALL_SIZE,
-            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
-            transformOrigin: '0 0',
-            transition: isPanning ? 'none' : 'transform 0.05s ease-out',
           }}
         >
           {notes.map((note) => (
