@@ -7,7 +7,6 @@ interface ToolbarProps {
 
 export function Toolbar({ onRandomNote, onNewNote }: ToolbarProps) {
   const notesCount = useWallStore((s) => s.notes.length);
-  const editingNoteId = useWallStore((s) => s.editingNoteId);
   const activeListViewTag = useWallStore((s) => s.activeListViewTag);
 
   return (
@@ -23,8 +22,8 @@ export function Toolbar({ onRandomNote, onNewNote }: ToolbarProps) {
       <button
         className="toolbar-random-btn"
         onClick={onRandomNote}
-        disabled={notesCount === 0 || editingNoteId !== null}
-        title={editingNoteId ? 'Sulje muokkaus ensin' : `Avaa satunnainen viesti (${notesCount} kpl)`}
+        disabled={notesCount === 0}
+        title={`Avaa satunnainen viesti (${notesCount} kpl)`}
       >
         🎲 {notesCount}
       </button>

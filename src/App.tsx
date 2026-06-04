@@ -22,6 +22,7 @@ export default function App() {
   const loadNotes = useWallStore((s) => s.loadNotes);
   const setFocusedNoteId = useWallStore((s) => s.setFocusedNoteId);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const pendingPos = useRef({ x: 300, y: 300 });
   const notes = useWallStore((s) => s.notes);
 
   // Ref synkroniseen editointitilan tarkistukseen (välttää closure-ongelmat)
@@ -266,7 +267,7 @@ export default function App() {
       <CosmicBackground />
 
       <Toolbar onRandomNote={handleRandomNote} onNewNote={() => setShowCreateDialog(true)} />
-      {showCreateDialog && <CreateNoteDialog onClose={() => setShowCreateDialog(false)} />}
+      {showCreateDialog && <CreateNoteDialog onClose={() => setShowCreateDialog(false)} x={pendingPos.current.x} y={pendingPos.current.y} />}
       <TimeFilter />
       <TagBar />
       <TagListView />
@@ -299,9 +300,8 @@ export default function App() {
             onNoteDblClick={(note) => { setFocusedNoteId(note.id); handleNoteDoubleClick(note); }}
             onCanvasClick={(cx, cy) => {
               if (editingNoteId) { setEditingNoteId(null); return; }
-              addNote(cx, cy);
-              const r = containerRef.current?.getBoundingClientRect();
-              if (r) { setScale(1.8); setPosition({ x: r.width / 2 - cx * 1.8, y: r.height / 2 - cy * 1.8 }); }
+              pendingPos.current = { x: cx, y: cy };
+              setShowCreateDialog(true);
             }}
             onPanStart={({ clientX, clientY }) => {
               panRef.current = {

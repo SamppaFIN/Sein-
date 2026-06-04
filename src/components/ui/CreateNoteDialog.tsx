@@ -5,9 +5,11 @@ import { randomColor } from '@/lib/notes';
 
 interface CreateNoteDialogProps {
   onClose: () => void;
+  x?: number;
+  y?: number;
 }
 
-export function CreateNoteDialog({ onClose }: CreateNoteDialogProps) {
+export function CreateNoteDialog({ onClose, x = 300, y = 300 }: CreateNoteDialogProps) {
   const [content, setContent] = useState('');
   const [color, setColor] = useState(randomColor());
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -19,7 +21,7 @@ export function CreateNoteDialog({ onClose }: CreateNoteDialogProps) {
 
   const handleCreate = () => {
     if (content.trim() === '') return;
-    addNote(300, 300, color, content);
+    addNote(x, y, color, content);
 
     onClose();
   };

@@ -10,7 +10,7 @@ export function DevPanel() {
 
   const handleSeed = async () => {
     setSeeding(true);
-    await seedNotes(100);
+    await seedNotes(50);
     setSeeding(false);
   };
 
@@ -97,7 +97,7 @@ export function DevPanel() {
             fontFamily: 'monospace',
           }}
         >
-          {seeding ? '⏳ Luodaan...' : '🌱 Seed 100 viestiä (30 pv)'}
+          {seeding ? '⏳ Luodaan...' : '🌱 Seed 50 viestiä (30 pv)'}
         </button>
 
         <button
