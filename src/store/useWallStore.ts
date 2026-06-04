@@ -67,7 +67,7 @@ export const useWallStore = create<WallState>((set, get) => ({
   },
 
   addNote: async (x, y) => {
-    const { notes, editingNoteId, activeColor } = get();
+    const { notes, editingNoteId } = get();
     if (editingNoteId !== null) return;
 
     const newNote = createStickyNote(x, y, notes.length + 1);
