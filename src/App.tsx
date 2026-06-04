@@ -18,7 +18,6 @@ const WALL_SIZE = 5000;
 export default function App() {
   const editingNoteId = useWallStore((s) => s.editingNoteId);
   const setEditingNoteId = useWallStore((s) => s.setEditingNoteId);
-  const addNote = useWallStore((s) => s.addNote);
   const loadNotes = useWallStore((s) => s.loadNotes);
   const setFocusedNoteId = useWallStore((s) => s.setFocusedNoteId);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
