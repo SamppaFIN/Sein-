@@ -179,11 +179,11 @@ export default function App() {
       const rect = el.getBoundingClientRect();
 
       // Päivitä RAF-kohde HETI ja React-tila samalla
-      const oldScale = zoomGoal.current.s;
-      const oldX = zoomGoal.current.x;
-      const oldY = zoomGoal.current.y;
+      // Lue LÄHTÖarvot siitä mitä OIKEASTI renderöidään (ei tavoitteesta!)
+      const oldScale = rafTarget.current.s;
+      const oldX = rafTarget.current.x;
+      const oldY = rafTarget.current.y;
 
-      // Eksponentiaalinen zoom — tuntuu luonnolliselta
       const factor = e.deltaY > 0 ? 0.92 : 1.08;
       const newScale = Math.min(Math.max(0.01, oldScale * factor), 4);
 
@@ -399,7 +399,7 @@ export default function App() {
     if (!rect) return;
     const focusId = useWallStore.getState().focusedNoteId;
     const oldS = rafTarget.current.s;
-    const newS = Math.min(Math.max(oldS + dir * 0.3, 0.01), 4);
+    const newS = Math.min(Math.max(oldS * (dir > 0 ? 1.3 : 0.75), 0.01), 4);
 
     let newX = rafTarget.current.x;
     let newY = rafTarget.current.y;
@@ -426,6 +426,7 @@ export default function App() {
   const zoomOut = () => zoomCentered(-1);
 
   const zoomReset = () => {
+    zoomGoal.current = { x: 0, y: 0, s: 1 };
     setScale(1);
     setPosition({ x: 0, y: 0 });
   };
