@@ -24,6 +24,8 @@ export function StickyNote({ note, onUpdate, onDoubleClick }: StickyNoteProps) {
   const editingNoteId = useWallStore((s) => s.editingNoteId);
   const setEditingNoteId = useWallStore((s) => s.setEditingNoteId);
   const setActiveListViewTag = useWallStore((s) => s.setActiveListViewTag);
+  const setFocusedNoteId = useWallStore((s) => s.setFocusedNoteId);
+  const focusedNoteId = useWallStore((s) => s.focusedNoteId);
 
   const isEditing = editingNoteId === note.id;
 
@@ -35,8 +37,9 @@ export function StickyNote({ note, onUpdate, onDoubleClick }: StickyNoteProps) {
   const minutesLeft = Math.max(0, Math.floor(timeLeft / 60000));
   const secondsLeft = Math.max(0, Math.floor((timeLeft % 60000) / 1000));
 
-  // Haalistuminen ajan myötä
-  const fadeOpacity = getFadeOpacity(note.created_at);
+  // Haalistuminen — pois päältä jos editoidaan tai fokusoitu
+  const isActive = isEditing || focusedNoteId === note.id;
+  const fadeOpacity = isActive ? 1 : getFadeOpacity(note.created_at);
 
   // Sulje väripaletti klikkauksesta ulkopuolelle
   useEffect(() => {
@@ -50,11 +53,12 @@ export function StickyNote({ note, onUpdate, onDoubleClick }: StickyNoteProps) {
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showColorPicker]);
 
-  // Tuplaklikkaus → zoom
+  // Tuplaklikkaus → zoom + fokus
   const handleDoubleClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
+    setFocusedNoteId(note.id);
     onDoubleClick(note);
-  }, [note, onDoubleClick]);
+  }, [note, onDoubleClick, setFocusedNoteId]);
 
   // Raahauksen aloitus
   const handleDragStart = useCallback((e: React.MouseEvent) => {

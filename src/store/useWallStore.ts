@@ -1,28 +1,25 @@
 import { create } from 'zustand';
-import type { Note, ViewMode } from '@/types';
+import type { Note, ViewMode, TimeMode } from '@/types';
 import { createStickyNote, randomColor } from '@/lib/notes';
 import { supabase } from '@/lib/supabase';
 
 interface WallState {
-  // Canvas-tila
   notes: Note[];
   viewMode: ViewMode;
-
-  // Tagisuodatus
   allTags: string[];
   selectedTags: string[];
-
-  // Muokkaustila
   editingNoteId: string | null;
   activeColor: string;
-
-  // Tagi-listausnäkymä
   activeListViewTag: string | null;
-
-  // Lataustila
   isLoading: boolean;
 
-  // Toiminnot
+  // Aikafiltteri
+  timeMode: TimeMode;
+  timeOffset: number;
+
+  // Tuplaklikkauksella korostettu lappu
+  focusedNoteId: string | null;
+
   loadNotes: () => Promise<void>;
   addNote: (x: number, y: number) => void;
   removeNote: (id: string) => void;
@@ -35,6 +32,9 @@ interface WallState {
   setEditingNoteId: (id: string | null) => void;
   setActiveColor: (color: string) => void;
   setActiveListViewTag: (tag: string | null) => void;
+  setTimeMode: (mode: TimeMode) => void;
+  setTimeOffset: (offset: number) => void;
+  setFocusedNoteId: (id: string | null) => void;
 }
 
 export const useWallStore = create<WallState>((set, get) => ({
@@ -46,6 +46,9 @@ export const useWallStore = create<WallState>((set, get) => ({
   activeColor: randomColor(),
   activeListViewTag: null,
   isLoading: false,
+  timeMode: 'all',
+  timeOffset: 0,
+  focusedNoteId: null,
 
   // Lataa kaikki viestit Supabasesta
   loadNotes: async () => {
@@ -126,6 +129,10 @@ export const useWallStore = create<WallState>((set, get) => ({
   setEditingNoteId: (id) => set({ editingNoteId: id }),
   setActiveColor: (color) => set({ activeColor: color }),
   setActiveListViewTag: (tag) => set({ activeListViewTag: tag }),
+
+  setTimeMode: (mode) => { set({ timeMode: mode, timeOffset: 0 }); },
+  setTimeOffset: (offset) => set({ timeOffset: offset }),
+  setFocusedNoteId: (id) => set({ focusedNoteId: id }),
 
   // Kehitys: Siivoa kanta
   clearNotes: async () => {
@@ -236,7 +243,27 @@ export const useWallStore = create<WallState>((set, get) => ({
 export function useFilteredNotes() {
   const notes = useWallStore((s) => s.notes);
   const selectedTags = useWallStore((s) => s.selectedTags);
+  const timeMode = useWallStore((s) => s.timeMode);
+  const timeOffset = useWallStore((s) => s.timeOffset);
 
-  if (selectedTags.length === 0) return notes;
-  return notes.filter((n) => selectedTags.some((t) => n.tags.includes(t)));
+  // Aikafiltteri
+  let filtered = notes;
+  if (timeMode !== 'all') {
+    const now = Date.now();
+    const msInDay = 86400000;
+    const range = timeMode === 'day' ? 1 : timeMode === 'week' ? 7 : 30;
+    const start = now - (timeOffset + range) * msInDay;
+    const end = now - timeOffset * msInDay;
+    filtered = notes.filter((n) => {
+      const t = new Date(n.created_at).getTime();
+      return t >= start && t <= end;
+    });
+  }
+
+  // Tagifiltteri
+  if (selectedTags.length > 0) {
+    filtered = filtered.filter((n) => selectedTags.some((t) => n.tags.includes(t)));
+  }
+
+  return filtered;
 }

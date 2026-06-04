@@ -1,8 +1,9 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { useWallStore, useFilteredNotes } from '@/store/useWallStore';
 import { Toolbar } from '@/components/toolbar/Toolbar';
-import { TagPanel } from '@/components/panels/TagPanel';
 import { TagListView } from '@/components/panels/TagListView';
+import { TimeFilter } from '@/components/ui/TimeFilter';
+import { TagBar } from '@/components/ui/TagBar';
 import { ZoomControls } from '@/components/ui/ZoomControls';
 import { StickyNote } from '@/components/notes/StickyNote';
 import { CosmicBackground } from '@/components/background/CosmicBackground';
@@ -18,6 +19,7 @@ export default function App() {
   const addNote = useWallStore((s) => s.addNote);
   const updateNote = useWallStore((s) => s.updateNote);
   const loadNotes = useWallStore((s) => s.loadNotes);
+  const setFocusedNoteId = useWallStore((s) => s.setFocusedNoteId);
   const notes = useFilteredNotes();
 
   // Ref synkroniseen editointitilan tarkistukseen (välttää closure-ongelmat)
@@ -85,6 +87,10 @@ export default function App() {
       const value = textarea?.value ?? '';
       const isEmpty = value.trim() === '' || value === 'Kirjoita uusi viesti seinälle';
 
+      if (!isEmpty) {
+        setFocusedNoteId(null);
+      }
+
       if (isEmpty) {
         // Tyhjä tarra — siirrä klikkauskohtaan
         const rect = containerRef.current?.getBoundingClientRect();
@@ -108,7 +114,8 @@ export default function App() {
     const canvasY = (e.clientY - rect.top - position.y) / scale;
 
     addNote(canvasX, canvasY);
-  }, [addNote, isPanning, position, scale, setEditingNoteId]);
+    setFocusedNoteId(null);
+  }, [addNote, isPanning, position, scale, setEditingNoteId, setFocusedNoteId]);
 
   // Tuplaklikkaus lappuun → keskitä ja zoomaa
   const handleNoteDoubleClick = useCallback((note: Note) => {
@@ -143,7 +150,8 @@ export default function App() {
       <CosmicBackground />
 
       <Toolbar />
-      <TagPanel />
+      <TimeFilter />
+      <TagBar />
       <TagListView />
 
       <div

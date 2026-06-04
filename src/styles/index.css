@@ -608,6 +608,172 @@ html, body, #root {
    Responsiivisuus — Mobiili ja tabletti
    ============================================ */
 
+/* ============================================
+   Aikafiltteri
+   ============================================ */
+
+.time-filter {
+  position: fixed;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--cosmic-panel-bg);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--cosmic-text-dim);
+}
+
+.time-filter-modes {
+  display: flex;
+  gap: 2px;
+}
+
+.time-filter-modes button {
+  padding: 4px 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11px;
+  font-family: inherit;
+  background: transparent;
+  color: var(--cosmic-text-dim);
+  transition: all 0.15s;
+}
+
+.time-filter-modes button:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cosmic-text);
+}
+
+.time-filter-modes button.active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.time-filter-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.time-filter-nav button {
+  padding: 2px 6px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  background: transparent;
+  color: var(--cosmic-text-dim);
+  transition: all 0.15s;
+}
+
+.time-filter-nav button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--cosmic-text);
+}
+
+.time-filter-nav button:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.time-filter-date {
+  font-size: 11px;
+  color: var(--cosmic-text-dim);
+  white-space: nowrap;
+  min-width: 160px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================
+   Tagibar (alapalkki)
+   ============================================ */
+
+.tag-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--cosmic-panel-bg);
+  backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.tag-bar-label {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.tag-bar-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+
+.tag-bar-item {
+  font-size: 12px;
+  color: var(--cosmic-text-dim);
+  background: rgba(255, 255, 255, 0.05);
+  padding: 3px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tag-bar-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--cosmic-text);
+}
+
+.tag-bar-item.selected {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
+.tag-bar-count {
+  font-size: 9px;
+  color: var(--cosmic-text-dim);
+  opacity: 0.7;
+}
+
+.tag-bar-clear {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--cosmic-text-dim);
+  transition: all 0.15s;
+  margin-left: auto;
+}
+
+.tag-bar-clear:hover {
+  background: rgba(255, 80, 80, 0.2);
+  color: #f66;
+}
+
 /* Pienet näytöt (alle 600px) */
 @media (max-width: 600px) {
   .toolbar {

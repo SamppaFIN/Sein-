@@ -45,6 +45,8 @@ export interface Note {
 
 export type ViewMode = 'sticky' | 'graffiti';
 
+export type TimeMode = 'all' | 'day' | 'week' | 'month';
+
 export interface WallDimensions {
   width: number;
   height: number;
