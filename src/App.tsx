@@ -72,7 +72,7 @@ export default function App() {
     const t = rafTarget.current;
     if (wall) wall.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.s})`;
     // Parallax: tausta liikkuu 3× hitaammin, skaalautuu vähemmän
-    if (bg) bg.style.transform = `translate(${t.x * 0.35}px, ${t.y * 0.35}px) scale(${0.8 + t.s * 0.2})`;
+    if (bg) bg.style.transform = `translate(${t.x * 0.15}px, ${t.y * 0.15}px) scale(${Math.min(1, 0.5 + t.s * 0.5)})`;
     rafId.current = requestAnimationFrame(rafLoop);
   }, []);
 
@@ -256,8 +256,8 @@ export default function App() {
       if (dist < bestDist) { bestDist = dist; bestNote = note; }
     }
 
-    // Snapataan vain jos ollaan tarpeeksi lähellä (alle puoli viewporttia)
-    if (bestDist < rect.width * 0.7) {
+    // Snapataan vain jos ollaan hyvin lähellä (< 60px)
+    if (bestDist < 60) {
       const cx = bestNote.x + bestNote.width / 2;
       const cy = bestNote.y + bestNote.height / 2;
       rafTarget.current = { x: vpCX - cx * s, y: vpCY - cy * s, s };
