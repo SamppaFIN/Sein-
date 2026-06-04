@@ -57,7 +57,7 @@ export default function App() {
   }, [notes]);
 
   // Zoom/pan -tila
-  // Zoom/pan -tila — käytetään ref:iä reaaliaikaiseen renderöintiin
+  // Zoom/pan -tila
   const [scale, setScale] = useState(1);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
@@ -65,43 +65,36 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const wallRef = useRef<HTMLDivElement>(null);
 
-  // RAF-pohjainen smooth-zoom (portaaton "lentävä" tuntuma)
-  const rafTarget = useRef({ x: 0, y: 0, s: 1 });
+  // 5 kiinteää zoom-tasoa — + zoomGoal/rafTarget refsit (yhteensopivuus)
+  const ZOOM_LEVELS = [0.15, 0.35, 0.6, 1, 1.8, 3.5];
+  const zoomIdx = useRef(2);
   const zoomGoal = useRef({ x: 0, y: 0, s: 1 });
+  const rafTarget = useRef({ x: 0, y: 0, s: 1 });
+
+  // Yksinkertainen RAF: päivittää seinän + parallaxin suoraan DOM:iin
+  const rafPos = useRef({ x: 0, y: 0 }); // vain pan-dragille
   const rafId = useRef(0);
-  const rafLoop = useCallback(() => {
-    const wall = wallRef.current;
-    const bg = document.querySelector('.cosmic-bg-canvas') as HTMLCanvasElement | null;
-    const t = rafTarget.current;
-    const g = zoomGoal.current;
-
-    // LERP: liu'utaan kohti tavoitetta
-    const lerp = 0.12;
-    t.x += (g.x - t.x) * lerp;
-    t.y += (g.y - t.y) * lerp;
-    t.s += (g.s - t.s) * lerp;
-
-    if (wall) wall.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.s})`;
-    if (bg) bg.style.transform = `translate(${t.x * 0.15}px, ${t.y * 0.15}px) scale(${Math.min(1, 0.5 + t.s * 0.5)})`;
-    rafId.current = requestAnimationFrame(rafLoop);
-  }, []);
-
-  // Käynnistä RAF-silmukka
   useEffect(() => {
-    rafId.current = requestAnimationFrame(rafLoop);
+    const loop = () => {
+      const wall = wallRef.current;
+      const bg = document.querySelector('.cosmic-bg-canvas') as HTMLCanvasElement | null;
+      const px = rafPos.current.x + position.x;
+      const py = rafPos.current.y + position.y;
+      if (wall) wall.style.transform = `translate(${px}px, ${py}px) scale(${scale})`;
+      if (bg) bg.style.transform = `translate(${px * 0.15}px, ${py * 0.15}px) scale(${Math.min(1, 0.5 + scale * 0.5)})`;
+      rafId.current = requestAnimationFrame(loop);
+    };
+    rafId.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafId.current);
-  }, [rafLoop]);
+  }, [scale, position]);
 
-  // Päivitä RAF-kohde aina kun scale tai position muuttuu
-  useEffect(() => { zoomGoal.current = { x: position.x, y: position.y, s: scale }; }, [position, scale]);
-
-  // Pakota transform jokaisen React-renderöinnin jälkeen (estää palautumisen)
+  // Päivitä inline style jokaisen renderöinnin jälkeen (React pitää ajan tasalla)
   useEffect(() => {
-    const el = wallRef.current;
-    if (!el) return;
-    const t = rafTarget.current;
-    el.style.transform = `translate(${t.x}px, ${t.y}px) scale(${t.s})`;
-  });
+    const wall = wallRef.current;
+    if (!wall) return;
+    wall.style.transformOrigin = '0 0';
+    wall.style.transform = `translate(${position.x}px, ${position.y}px) scale(${scale})`;
+  }, [scale, position]);
 
   // Kosketustuki — päivittää suoraan ref:iä, ei React-tilaa (smooth mobiili)
   const touchRef = useRef({ startX: 0, startY: 0, lastDist: 0, startScale: 1, startPos: { x: 0, y: 0 }, time: 0, moved: false });
@@ -129,10 +122,9 @@ export default function App() {
       const dy = Math.abs(touch.clientY - t.startY);
       if (dx > 5 || dy > 5) t.moved = true;
       // Päivitä suoraan RAF-kohdetta (ei React-tilaa → smooth)
-      rafTarget.current = {
-        x: t.startPos.x + (touch.clientX - t.startX),
-        y: t.startPos.y + (touch.clientY - t.startY),
-        s: scale,
+      rafPos.current = {
+        x: t.startPos.x + (touch.clientX - t.startX) - position.x,
+        y: t.startPos.y + (touch.clientY - t.startY) - position.y,
       };
     } else if (e.touches.length === 2) {
       t.moved = true;
@@ -148,8 +140,8 @@ export default function App() {
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
     // Synkronoi ref → React-tila kun liike loppuu
-    setPosition({ x: rafTarget.current.x, y: rafTarget.current.y });
-    setScale(rafTarget.current.s);
+    setPosition({ x: position.x + rafPos.current.x, y: position.y + rafPos.current.y });
+    rafPos.current = { x: 0, y: 0 };
     const t = touchRef.current;
     if (!t.moved && e.changedTouches.length === 1) {
       const touch = e.changedTouches[0];
@@ -158,18 +150,18 @@ export default function App() {
       if (!rect || isPanning) return;
       const currentlyEditing = editingRef.current;
       if (currentlyEditing) { setEditingNoteId(null); return; }
-      const canvasX = (touch.clientX - rect.left - rafTarget.current.x) / rafTarget.current.s;
-      const canvasY = (touch.clientY - rect.top - rafTarget.current.y) / rafTarget.current.s;
+      const canvasX = (touch.clientX - rect.left - position.x - rafPos.current.x) / scale;
+      const canvasY = (touch.clientY - rect.top - position.y - rafPos.current.y) / scale;
       addNote(canvasX, canvasY);
       setFocusedNoteId(null);
       setTimeout(() => {
         const r = containerRef.current?.getBoundingClientRect();
-        if (r) { setScale(1.8); rafTarget.current.s = 1.8; setPosition({ x: r.width / 2 - canvasX * 1.8, y: r.height / 2 - canvasY * 1.8 }); rafTarget.current.x = r.width / 2 - canvasX * 1.8; rafTarget.current.y = r.height / 2 - canvasY * 1.8; }
+        if (r) { setScale(1.8); setPosition({ x: r.width / 2 - canvasX * 1.8, y: r.height / 2 - canvasY * 1.8 }); }
       }, 50);
     }
   }, [isPanning, addNote, setEditingNoteId, setFocusedNoteId]);
 
-  // Zoom käsittely — keskittää fokusoituun taikka hiiren mukaan
+  // Zoom — 5 kiinteää tasoa, rulla siirtyy tasojen välillä
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
@@ -177,43 +169,20 @@ export default function App() {
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
       const rect = el.getBoundingClientRect();
+      const dir = e.deltaY > 0 ? -1 : 1;
+      const next = Math.min(Math.max(zoomIdx.current + dir, 0), ZOOM_LEVELS.length - 1);
+      if (next === zoomIdx.current) return;
+      zoomIdx.current = next;
+      const newScale = ZOOM_LEVELS[next];
 
-      // Päivitä RAF-kohde HETI ja React-tila samalla
-      // Lue LÄHTÖarvot siitä mitä OIKEASTI renderöidään (ei tavoitteesta!)
-      const oldScale = rafTarget.current.s;
-      const oldX = rafTarget.current.x;
-      const oldY = rafTarget.current.y;
+      // Pidä hiiren alla oleva kohta paikallaan
+      const cursorX = e.clientX - rect.left;
+      const cursorY = e.clientY - rect.top;
+      const newX = cursorX - (cursorX - position.x) * (newScale / scale);
+      const newY = cursorY - (cursorY - position.y) * (newScale / scale);
 
-      const factor = e.deltaY > 0 ? 0.92 : 1.08;
-      const newScale = Math.min(Math.max(0.01, oldScale * factor), 4);
-
-      let newX: number, newY: number;
-      const focusId = useWallStore.getState().focusedNoteId;
-
-      if (focusId) {
-        const note = useWallStore.getState().notes.find((n) => n.id === focusId);
-        if (note) {
-          const cx = note.x + note.width / 2;
-          const cy = note.y + note.height / 2;
-          newX = rect.width / 2 - cx * newScale;
-          newY = rect.height / 2 - cy * newScale;
-        } else {
-          const cursorX = (e.clientX - rect.left);
-          const cursorY = (e.clientY - rect.top);
-          newX = cursorX - (cursorX - oldX) * (newScale / oldScale);
-          newY = cursorY - (cursorY - oldY) * (newScale / oldScale);
-        }
-      } else {
-        const cursorX = (e.clientX - rect.left);
-        const cursorY = (e.clientY - rect.top);
-        newX = cursorX - (cursorX - oldX) * (newScale / oldScale);
-        newY = cursorY - (cursorY - oldY) * (newScale / oldScale);
-      }
-
-      // Aseta tavoite — RAF liukuu kohti sitä smoothisti
-      zoomGoal.current = { x: newX, y: newY, s: newScale };
-      setPosition({ x: newX, y: newY });
       setScale(newScale);
+      setPosition({ x: newX, y: newY });
     };
 
     el.addEventListener('wheel', handleWheel, { passive: false });
@@ -231,18 +200,16 @@ export default function App() {
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!isPanning) return;
     // Päivitä suoraan RAF-kohdetta smooth pan
-    rafTarget.current = {
-      x: e.clientX - panStart.x,
-      y: e.clientY - panStart.y,
-      s: scale,
+    rafPos.current = {
+      x: e.clientX - panStart.x - position.x,
+      y: e.clientY - panStart.y - position.y,
     };
   }, [isPanning, panStart, scale]);
 
   const handleMouseUp = useCallback(() => {
     setIsPanning(false);
-    setPosition({ x: rafTarget.current.x, y: rafTarget.current.y });
-    zoomGoal.current.x = rafTarget.current.x;
-    zoomGoal.current.y = rafTarget.current.y;
+    setPosition({ x: position.x + rafPos.current.x, y: position.y + rafPos.current.y });
+    rafPos.current = { x: 0, y: 0 };
     snapToNearest();
   }, []);
 
@@ -254,26 +221,21 @@ export default function App() {
     if (!rect) return;
     const vpCX = rect.width / 2;
     const vpCY = rect.height / 2;
-    const s = rafTarget.current.s;
-    const px = rafTarget.current.x;
-    const py = rafTarget.current.y;
-
     // Etsi lähin — muunna lapun keskipiste screen-koordinaatistoon
     let bestNote = notes[0];
     let bestDist = Infinity;
+    const sx = position.x + rafPos.current.x;
+    const sy = position.y + rafPos.current.y;
     for (const note of notes) {
-      const screenX = (note.x + note.width / 2) * s + px;
-      const screenY = (note.y + note.height / 2) * s + py;
+      const screenX = (note.x + note.width / 2) * scale + sx;
+      const screenY = (note.y + note.height / 2) * scale + sy;
       const dist = Math.hypot(screenX - vpCX, screenY - vpCY);
       if (dist < bestDist) { bestDist = dist; bestNote = note; }
     }
-
-    // Snapataan vain jos ollaan hyvin lähellä (< 60px)
     if (bestDist < 60) {
       const cx = bestNote.x + bestNote.width / 2;
       const cy = bestNote.y + bestNote.height / 2;
-      zoomGoal.current = { x: vpCX - cx * s, y: vpCY - cy * s, s };
-      setPosition({ x: vpCX - cx * s, y: vpCY - cy * s });
+      setPosition({ x: vpCX - cx * scale, y: vpCY - cy * scale });
     }
   }, []);
 
@@ -297,8 +259,8 @@ export default function App() {
         // Tyhjä tarra — siirrä klikkauskohtaan
         const rect = containerRef.current?.getBoundingClientRect();
         if (rect) {
-          const canvasX = (e.clientX - rect.left - rafTarget.current.x) / rafTarget.current.s;
-          const canvasY = (e.clientY - rect.top - rafTarget.current.y) / rafTarget.current.s;
+          const canvasX = (e.clientX - rect.left - position.x) / scale;
+          const canvasY = (e.clientY - rect.top - position.y) / scale;
           useWallStore.getState().updateNote(currentlyEditing, { x: canvasX, y: canvasY });
         }
         return;
@@ -312,13 +274,8 @@ export default function App() {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    // Käytä rafTargetia sulkeman varassa olevan React-tilan sijaan
-    const currentScale = rafTarget.current.s;
-    const currentX = rafTarget.current.x;
-    const currentY = rafTarget.current.y;
-
-    const canvasX = (e.clientX - rect.left - currentX) / currentScale;
-    const canvasY = (e.clientY - rect.top - currentY) / currentScale;
+    const canvasX = (e.clientX - rect.left - position.x) / scale;
+    const canvasY = (e.clientY - rect.top - position.y) / scale;
 
     addNote(canvasX, canvasY);
     setFocusedNoteId(null);
@@ -327,7 +284,7 @@ export default function App() {
     if (rect) {
       const x = rect.width / 2 - canvasX * 1.8;
       const y = rect.height / 2 - canvasY * 1.8;
-      zoomGoal.current = { x, y, s: 1.8 };
+      setScale(1.8);
       setScale(1.8);
       setPosition({ x, y });
     }
@@ -348,11 +305,11 @@ export default function App() {
       y: rect.height / 2 - noteCenterY * targetScale,
     });
     // Päivitä tavoite (RAF liukuu smoothisti)
-    zoomGoal.current = {
+    setScale(targetScale);
+    setPosition({
       x: rect.width / 2 - noteCenterX * targetScale,
       y: rect.height / 2 - noteCenterY * targetScale,
-      s: targetScale,
-    };
+    });
   }, []);
 
   // Satunnainen lappu
@@ -417,7 +374,8 @@ export default function App() {
       newY = rect.height / 2 - (rect.height / 2 - rafTarget.current.y) * (newS / oldS);
     }
 
-    zoomGoal.current = { x: newX, y: newY, s: newS };
+    setPosition({ x: newX, y: newY });
+    setScale(newS);
     setPosition({ x: newX, y: newY });
     setScale(newS);
   };
