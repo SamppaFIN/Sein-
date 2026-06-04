@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
-import { useWallStore } from '@/store/useWallStore';
+import { useWallStore, getFilteredNotes } from '@/store/useWallStore';
 import { Toolbar } from '@/components/toolbar/Toolbar';
 import { TagListView } from '@/components/panels/TagListView';
 import { TimeFilter } from '@/components/ui/TimeFilter';
@@ -152,7 +152,7 @@ export default function App() {
 
   // Satunnainen lappu
   const handleRandomNote = useCallback(() => {
-    const notes = useWallStore.getState().notes;
+    const notes = getFilteredNotes(useWallStore.getState());
     if (notes.length === 0) return;
     const randomIdx = Math.floor(Math.random() * notes.length);
     const note = notes[randomIdx];

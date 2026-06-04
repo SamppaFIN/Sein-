@@ -318,3 +318,23 @@ export function useFilteredNotes() {
 
   return filtered;
 }
+
+/** Puhdas funktio — saa suodatetut notet ilman hookia (käytä getState():n kanssa) */
+export function getFilteredNotes(state: ReturnType<typeof useWallStore.getState>): Note[] {
+  const { notes, selectedTags, timeMode, timeOffset } = state;
+  let filtered = notes;
+  if (timeMode !== 'all') {
+    const now = Date.now();
+    const range = timeMode === 'day' ? 1 : timeMode === 'week' ? 7 : 30;
+    const start = now - (timeOffset + range) * 86400000;
+    const end = now - timeOffset * 86400000;
+    filtered = notes.filter((n) => {
+      const t = new Date(n.created_at).getTime();
+      return t >= start && t <= end;
+    });
+  }
+  if (selectedTags.length > 0) {
+    filtered = filtered.filter((n) => selectedTags.some((t) => n.tags.includes(t)));
+  }
+  return filtered;
+}
