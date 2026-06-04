@@ -131,15 +131,27 @@ export default function App() {
     } // sulje if-block
   }, [isPanning, position, scale, addNote, setEditingNoteId, setFocusedNoteId]);
 
-  // Zoom käsittely — käytetään addEventListener koska React tekee wheelin passiiviseksi
+  // Zoom käsittely — keskittää hiiren tai keskipisteen mukaan
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
     const handleWheel = (e: WheelEvent) => {
       e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setScale((prev) => Math.min(Math.max(0.15, prev + delta), 4));
+      const rect = el.getBoundingClientRect();
+      const cursorX = (e.clientX - rect.left);
+      const cursorY = (e.clientY - rect.top);
+
+      setScale((prev) => {
+        const delta = e.deltaY > 0 ? -0.08 : 0.08;
+        const newScale = Math.min(Math.max(0.01, prev + delta), 4);
+        // Säädä positio niin, että hiiren alla oleva kohta pysyy paikallaan
+        setPosition((pos) => ({
+          x: cursorX - (cursorX - pos.x) * (newScale / prev),
+          y: cursorY - (cursorY - pos.y) * (newScale / prev),
+        }));
+        return newScale;
+      });
     };
 
     el.addEventListener('wheel', handleWheel, { passive: false });
@@ -252,13 +264,35 @@ export default function App() {
 
   // Zoomaa ulos näyttämään koko seinä
   const handleShowAll = useCallback(() => {
-    setScale(0.25);
+    setScale(0.01);
     setPosition({ x: 0, y: 0 });
   }, []);
 
-  // Zoom-napit
-  const zoomIn = () => setScale((s) => Math.min(s + 0.2, 4));
-  const zoomOut = () => setScale((s) => Math.max(s - 0.2, 0.15));
+  // Zoom-napit — keskittävät näkymän keskipisteen mukaan
+  const zoomIn = () => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    setScale((prev) => {
+      const newS = Math.min(prev + 0.3, 4);
+      setPosition((pos) => ({ x: cx - (cx - pos.x) * (newS / prev), y: cy - (cy - pos.y) * (newS / prev) }));
+      return newS;
+    });
+  };
+
+  const zoomOut = () => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    setScale((prev) => {
+      const newS = Math.max(prev - 0.3, 0.01);
+      setPosition((pos) => ({ x: cx - (cx - pos.x) * (newS / prev), y: cy - (cy - pos.y) * (newS / prev) }));
+      return newS;
+    });
+  };
+
   const zoomReset = () => {
     setScale(1);
     setPosition({ x: 0, y: 0 });
