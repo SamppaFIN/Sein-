@@ -222,10 +222,10 @@ export default function App() {
 
   // Satunnainen lappu
   const handleRandomNote = useCallback(() => {
-    const filtered = useFilteredNotes();
-    if (filtered.length === 0) return;
-    const randomIdx = Math.floor(Math.random() * filtered.length);
-    const note = filtered[randomIdx];
+    const notes = useWallStore.getState().notes;
+    if (notes.length === 0) return;
+    const randomIdx = Math.floor(Math.random() * notes.length);
+    const note = notes[randomIdx];
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const cx = note.x + note.width / 2;

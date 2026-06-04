@@ -247,8 +247,27 @@ export function StickyNote({ note, onUpdate, onDoubleClick }: StickyNoteProps) {
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           />
-          <div style={{ fontSize: 9, color: '#bbb', marginTop: 4 }}>
-            Ctrl+Enter tallentaa • Escape peruu • klikkaa muualle sulkeaksesi
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleSaveWithTags();
+              }}
+              style={{
+                fontSize: 11,
+                padding: '3px 10px',
+                border: 'none',
+                borderRadius: 6,
+                background: '#333',
+                color: '#fff',
+                cursor: 'pointer',
+              }}
+            >
+              Tallenna
+            </button>
+            <span style={{ fontSize: 9, color: '#bbb' }}>
+              Ctrl+Enter • Esc
+            </span>
           </div>
         </>
       ) : (
